@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>태그 기반 메시지 변환 데모</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --border: #e2e4e9;
+    --text: #1b1d23;
+    --muted: #6b7280;
+    --accent: #4f46e5;
+    --accent-bg: #eef0ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15161a;
+      --card: #1e2027;
+      --border: #33353d;
+      --text: #e7e8ea;
+      --muted: #9aa0aa;
+      --accent: #818cf8;
+      --accent-bg: #262a45;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", Pretendard, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 32px 20px 80px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 14px; }
+
+  .recipients { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .recipient {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .recipient:hover { border-color: var(--accent); }
+  .recipient.selected { border-color: var(--accent); background: var(--accent-bg); }
+  .recipient .name { font-weight: 600; font-size: 14px; }
+  .recipient .role { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+  input[type="text"], textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+  }
+  textarea { min-height: 110px; }
+
+  button {
+    margin-top: 16px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 11px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .result-grid { grid-template-columns: 1fr; } }
+  .result-box h3 { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+  .result-box .text {
+    white-space: pre-wrap;
+    line-height: 1.6;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    min-height: 100px;
+    background: var(--bg);
+  }
+
+  .status { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .error { color: #e5484d; }
+  .hidden { display: none; }
+  nav { display: flex; gap: 16px; margin-bottom: 20px; font-size: 13px; }
+  nav a { color: var(--muted); text-decoration: none; }
+  nav a.active { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a href="/" class="active">변환 데모</a>
+      <a href="/profiles.html">프로필 관리</a>
+    </nav>
+    <h1>태그 기반 메시지 변환 데모</h1>
+    <div class="sub">AI 학습 없이, 수신자에게 붙은 태그(어조/분량/구조/직설성)로 같은 원문을 다르게 변환합니다.</div>
+
+    <div class="card">
+      <h2>1. 수신자 선택</h2>
+      <div id="recipients" class="recipients"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. 원문 작성</h2>
+      <label for="purpose">메시지 목적 (선택)</label>
+      <input id="purpose" type="text" placeholder="예: 디자인 시안 피드백 요청" />
+
+      <label for="originalText">원문 메시지</label>
+      <textarea id="originalText">이번에 새로 만든 로그인 화면 디자인 시안 좀 봐주세요. 다음주 화요일까지 피드백 주시면 좋겠고, 색상이랑 버튼 배치가 좀 애매한 것 같아서 의견 듣고 싶습니다.</textarea>
+
+      <button id="convertBtn" disabled>변환하기</button>
+      <div id="status" class="status"></div>
+    </div>
+
+    <div id="resultCard" class="card hidden">
+      <h2>3. 결과 비교</h2>
+      <div class="chips" id="appliedTags" style="margin-bottom:16px;"></div>
+      <div class="result-grid">
+        <div class="result-box">
+          <h3>원문</h3>
+          <div class="text" id="originalOut"></div>
+        </div>
+        <div class="result-box">
+          <h3>변환된 메시지</h3>
+          <div class="text" id="convertedOut"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let selectedRecipientId = null;
+
+  const recipientsEl = document.getElementById('recipients');
+  const convertBtn = document.getElementById('convertBtn');
+  const statusEl = document.getElementById('status');
+  const resultCard = document.getElementById('resultCard');
+  const appliedTagsEl = document.getElementById('appliedTags');
+  const originalOutEl = document.getElementById('originalOut');
+  const convertedOutEl = document.getElementById('convertedOut');
+
+  function renderChips(container, tags) {
+    container.innerHTML = '';
+    tags.forEach((t) => {
+      const span = document.createElement('span');
+      span.className = 'chip';
+      span.textContent = `${t.category}: ${t.label}`;
+      container.appendChild(span);
+    });
+  }
+
+  function updateConvertButton() {
+    const hasText = document.getElementById('originalText').value.trim().length > 0;
+    convertBtn.disabled = !(selectedRecipientId && hasText);
+  }
+
+  async function loadRecipients() {
+    const res = await fetch('/api/recipients');
+    const recipients = await res.json();
+
+    recipientsEl.innerHTML = '';
+    recipients.forEach((r) => {
+      const card = document.createElement('div');
+      card.className = 'recipient';
+      card.dataset.id = r.id;
+
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = r.name;
+
+      const role = document.createElement('div');
+      role.className = 'role';
+      role.textContent = r.jobRole || '';
+
+      const chips = document.createElement('div');
+      chips.className = 'chips';
+      renderChips(chips, r.tags);
+
+      card.appendChild(name);
+      card.appendChild(role);
+      card.appendChild(chips);
+
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.recipient').forEach((el) => el.classList.remove('selected'));
+        card.classList.add('selected');
+        selectedRecipientId = r.id;
+        updateConvertButton();
+      });
+
+      recipientsEl.appendChild(card);
+    });
+  }
+
+  document.getElementById('originalText').addEventListener('input', updateConvertButton);
+
+  convertBtn.addEventListener('click', async () => {
+    const originalText = document.getElementById('originalText').value.trim();
+    const purpose = document.getElementById('purpose').value.trim();
+
+    convertBtn.disabled = true;
+    statusEl.textContent = 'AI가 변환하는 중...';
+    statusEl.classList.remove('error');
+    resultCard.classList.add('hidden');
+
+    try {
+      const res = await fetch('/api/messages/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ originalText, purpose, recipientId: selectedRecipientId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error?.message || '변환에 실패했습니다.');
+      }
+
+      renderChips(appliedTagsEl, data.appliedTags);
+      originalOutEl.textContent = data.originalText;
+      convertedOutEl.textContent = data.convertedText;
+      resultCard.classList.remove('hidden');
+      statusEl.textContent = '';
+    } catch (err) {
+      statusEl.textContent = err.message;
+      statusEl.classList.add('error');
+    } finally {
+      convertBtn.disabled = false;
+    }
+  });
+
+  loadRecipients();
+</script>
+</body>
+</html>

@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>프로필 관리 데모</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --border: #e2e4e9;
+    --text: #1b1d23;
+    --muted: #6b7280;
+    --accent: #4f46e5;
+    --accent-bg: #eef0ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15161a;
+      --card: #1e2027;
+      --border: #33353d;
+      --text: #e7e8ea;
+      --muted: #9aa0aa;
+      --accent: #818cf8;
+      --accent-bg: #262a45;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", Pretendard, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px 20px 80px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  nav { display: flex; gap: 16px; margin-bottom: 20px; font-size: 13px; }
+  nav a { color: var(--muted); text-decoration: none; }
+  nav a.active { color: var(--accent); font-weight: 600; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+
+  .grid2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 14px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .link-btn {
+    background: none; border: none; color: var(--accent);
+    cursor: pointer; font-size: 12px; padding: 0; text-decoration: underline;
+  }
+
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 5px; }
+  input[type="text"] {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    padding: 9px 11px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+
+  .tag-groups { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+  .tag-group { min-width: 140px; }
+  .tag-group-title { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+  .tag-check { display: block; font-size: 13px; margin-bottom: 4px; cursor: pointer; }
+  .tag-check input { margin-right: 6px; }
+
+  .form-actions { display: flex; gap: 8px; margin-top: 16px; }
+  button.primary {
+    background: var(--accent); color: white; border: none; border-radius: 8px;
+    padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  button.ghost {
+    background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 18px; font-size: 14px; cursor: pointer;
+  }
+  .status { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .error { color: #e5484d; }
+  .badge-edit { font-size: 11px; color: var(--accent); }
+  .hidden { display: none; }
+
+  .mode-toggle { display: flex; gap: 6px; margin-top: 6px; }
+  .mode-btn {
+    font-size: 12px; padding: 5px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .mode-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .ai-box { margin-top: 8px; }
+  .ai-box textarea {
+    width: 100%; min-height: 84px;
+    border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text);
+    padding: 9px 11px; font-size: 13px; font-family: inherit; resize: vertical;
+  }
+  .ai-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a href="/">변환 데모</a>
+      <a href="/profiles.html" class="active">프로필 관리</a>
+    </nav>
+    <h1>프로필 관리 데모 (FS-001 / FS-003 / 태그 부착)</h1>
+    <div class="sub">사용자·수신자 프로필을 만들고 태그를 붙여봅니다. 여기서 만든 수신자는 변환 데모 페이지에도 바로 나타납니다.</div>
+
+    <div class="card">
+      <h2>태그 마스터 (참고용)</h2>
+      <div class="tag-groups" id="tagReference"></div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <div class="card">
+          <h2>사용자 (발신자) <span id="userEditBadge" class="badge-edit"></span></h2>
+          <label>이름</label>
+          <input type="text" id="userName" />
+          <label>이메일</label>
+          <input type="text" id="userEmail" />
+          <label>직무</label>
+          <input type="text" id="userJobRole" placeholder="예: 백엔드 개발자" />
+          <label>소속 팀</label>
+          <input type="text" id="userTeam" placeholder="예: 플랫폼팀" />
+          <label>선호 스타일 태그</label>
+          <div class="mode-toggle">
+            <button type="button" class="mode-btn active" id="userModeManualBtn">수동 선택</button>
+            <button type="button" class="mode-btn" id="userModeAiBtn">AI 자동 추론</button>
+          </div>
+          <div class="tag-groups" id="userTagBoxes"></div>
+          <div class="ai-box hidden" id="userAiBox">
+            <textarea id="userSampleText" placeholder="이 사람이 쓴 메시지나 특징을 붙여넣으세요. 저장할 때마다 AI가 기존 태그와 병합해서 업데이트합니다."></textarea>
+            <div class="ai-hint">카테고리(어조/분량/구조/직설성)별로 근거가 있는 것만 갱신되고, 나머지는 기존 값이 유지됩니다.</div>
+          </div>
+          <div class="form-actions">
+            <button class="primary" id="userSubmitBtn">추가</button>
+            <button class="ghost hidden" id="userCancelBtn">취소</button>
+          </div>
+          <div class="status" id="userStatus"></div>
+        </div>
+
+        <div class="card">
+          <h2>사용자 목록</h2>
+          <table>
+            <thead><tr><th>이름</th><th>직무/팀</th><th>태그</th><th></th></tr></thead>
+            <tbody id="userTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h2>수신자 <span id="recipientEditBadge" class="badge-edit"></span></h2>
+          <label>이름</label>
+          <input type="text" id="recipientName" />
+          <label>이메일</label>
+          <input type="text" id="recipientEmail" />
+          <label>직무</label>
+          <input type="text" id="recipientJobRole" placeholder="예: PM" />
+          <label>선호 스타일 태그</label>
+          <div class="mode-toggle">
+            <button type="button" class="mode-btn active" id="recipientModeManualBtn">수동 선택</button>
+            <button type="button" class="mode-btn" id="recipientModeAiBtn">AI 자동 추론</button>
+          </div>
+          <div class="tag-groups" id="recipientTagBoxes"></div>
+          <div class="ai-box hidden" id="recipientAiBox">
+            <textarea id="recipientSampleText" placeholder="이 사람이 보낸 메시지나 특징을 붙여넣으세요. 저장할 때마다 AI가 기존 태그와 병합해서 업데이트합니다."></textarea>
+            <div class="ai-hint">카테고리(어조/분량/구조/직설성)별로 근거가 있는 것만 갱신되고, 나머지는 기존 값이 유지됩니다.</div>
+          </div>
+          <div class="form-actions">
+            <button class="primary" id="recipientSubmitBtn">추가</button>
+            <button class="ghost hidden" id="recipientCancelBtn">취소</button>
+          </div>
+          <div class="status" id="recipientStatus"></div>
+        </div>
+
+        <div class="card">
+          <h2>수신자 목록</h2>
+          <table>
+            <thead><tr><th>이름</th><th>직무</th><th>태그</th><th></th></tr></thead>
+            <tbody id="recipientTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let tags = [];
+  let editingUserId = null;
+  let editingRecipientId = null;
+  let userTagMode = 'manual';
+  let recipientTagMode = 'manual';
+
+  function setMode(prefix, mode) {
+    if (prefix === 'user') userTagMode = mode;
+    else recipientTagMode = mode;
+
+    document.getElementById(`${prefix}ModeManualBtn`).classList.toggle('active', mode === 'manual');
+    document.getElementById(`${prefix}ModeAiBtn`).classList.toggle('active', mode === 'ai');
+    document.getElementById(`${prefix}TagBoxes`).classList.toggle('hidden', mode !== 'manual');
+    document.getElementById(`${prefix}AiBox`).classList.toggle('hidden', mode !== 'ai');
+  }
+
+  function groupByCategory(list) {
+    return list.reduce((acc, t) => {
+      (acc[t.category] = acc[t.category] || []).push(t);
+      return acc;
+    }, {});
+  }
+
+  function renderChips(list) {
+    const wrap = document.createElement('div');
+    wrap.className = 'chips';
+    list.forEach((t) => {
+      const span = document.createElement('span');
+      span.className = 'chip';
+      span.textContent = t.label;
+      wrap.appendChild(span);
+    });
+    return wrap;
+  }
+
+  function renderTagReference() {
+    const container = document.getElementById('tagReference');
+    container.innerHTML = '';
+    Object.entries(groupByCategory(tags)).forEach(([category, list]) => {
+      const group = document.createElement('div');
+      group.className = 'tag-group';
+      const title = document.createElement('div');
+      title.className = 'tag-group-title';
+      title.textContent = category;
+      group.appendChild(title);
+      group.appendChild(renderChips(list));
+      container.appendChild(group);
+    });
+  }
+
+  function renderTagCheckboxes(containerId) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    Object.entries(groupByCategory(tags)).forEach(([category, list]) => {
+      const group = document.createElement('div');
+      group.className = 'tag-group';
+      const title = document.createElement('div');
+      title.className = 'tag-group-title';
+      title.textContent = category;
+      group.appendChild(title);
+      list.forEach((t) => {
+        const label = document.createElement('label');
+        label.className = 'tag-check';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = t.id;
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(' ' + t.label));
+        group.appendChild(label);
+      });
+      container.appendChild(group);
+    });
+  }
+
+  function getCheckedTagIds(containerId) {
+    return Array.from(document.querySelectorAll(`#${containerId} input[type=checkbox]:checked`)).map((el) => Number(el.value));
+  }
+
+  function setCheckedTagIds(containerId, ids) {
+    document.querySelectorAll(`#${containerId} input[type=checkbox]`).forEach((el) => {
+      el.checked = ids.includes(Number(el.value));
+    });
+  }
+
+  async function loadTags() {
+    const res = await fetch('/api/tags');
+    tags = await res.json();
+    renderTagReference();
+    renderTagCheckboxes('userTagBoxes');
+    renderTagCheckboxes('recipientTagBoxes');
+  }
+
+  // ---------- 사용자 ----------
+  function resetUserForm() {
+    editingUserId = null;
+    document.getElementById('userName').value = '';
+    document.getElementById('userEmail').value = '';
+    document.getElementById('userJobRole').value = '';
+    document.getElementById('userTeam').value = '';
+    document.getElementById('userSampleText').value = '';
+    setCheckedTagIds('userTagBoxes', []);
+    setMode('user', 'manual');
+    document.getElementById('userSubmitBtn').textContent = '추가';
+    document.getElementById('userCancelBtn').classList.add('hidden');
+    document.getElementById('userEditBadge').textContent = '';
+  }
+
+  document.getElementById('userModeManualBtn').addEventListener('click', () => setMode('user', 'manual'));
+  document.getElementById('userModeAiBtn').addEventListener('click', () => setMode('user', 'ai'));
+
+  async function loadUsers() {
+    const res = await fetch('/api/users');
+    const users = await res.json();
+    const tbody = document.getElementById('userTableBody');
+    tbody.innerHTML = '';
+    users.forEach((u) => {
+      const tr = document.createElement('tr');
+
+      const tdName = document.createElement('td');
+      tdName.textContent = u.name;
+
+      const tdRole = document.createElement('td');
+      tdRole.textContent = [u.jobRole, u.team].filter(Boolean).join(' · ');
+
+      const tdTags = document.createElement('td');
+      tdTags.appendChild(renderChips(u.tags));
+
+      const tdAction = document.createElement('td');
+      const editBtn = document.createElement('button');
+      editBtn.className = 'link-btn';
+      editBtn.textContent = '수정';
+      editBtn.addEventListener('click', () => {
+        editingUserId = u.id;
+        document.getElementById('userName').value = u.name || '';
+        document.getElementById('userEmail').value = u.email || '';
+        document.getElementById('userJobRole').value = u.jobRole || '';
+        document.getElementById('userTeam').value = u.team || '';
+        setMode('user', 'manual');
+        setCheckedTagIds('userTagBoxes', u.tags.map((t) => t.id));
+        document.getElementById('userSubmitBtn').textContent = '수정 저장';
+        document.getElementById('userCancelBtn').classList.remove('hidden');
+        document.getElementById('userEditBadge').textContent = `(#${u.id} 수정 중)`;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      tdAction.appendChild(editBtn);
+
+      tr.appendChild(tdName);
+      tr.appendChild(tdRole);
+      tr.appendChild(tdTags);
+      tr.appendChild(tdAction);
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('userCancelBtn').addEventListener('click', resetUserForm);
+
+  document.getElementById('userSubmitBtn').addEventListener('click', async () => {
+    const statusEl = document.getElementById('userStatus');
+    const sampleText = document.getElementById('userSampleText').value.trim();
+
+    if (userTagMode === 'ai' && !sampleText) {
+      statusEl.textContent = 'AI 자동 추론 모드에서는 샘플 텍스트를 입력해야 합니다.';
+      statusEl.classList.add('error');
+      return;
+    }
+
+    const payload = {
+      name: document.getElementById('userName').value.trim(),
+      email: document.getElementById('userEmail').value.trim(),
+      jobRole: document.getElementById('userJobRole').value.trim(),
+      team: document.getElementById('userTeam').value.trim(),
+    };
+    if (userTagMode === 'manual') {
+      payload.tagIds = getCheckedTagIds('userTagBoxes');
+    }
+
+    try {
+      const url = editingUserId ? `/api/users/${editingUserId}` : '/api/users';
+      const method = editingUserId ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || '저장 실패');
+
+      let statusText = '저장됨';
+      if (userTagMode === 'ai' && sampleText) {
+        const inferRes = await fetch('/api/tags/infer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityType: 'user', entityId: data.id, sampleText }),
+        });
+        const inferData = await inferRes.json();
+        if (!inferRes.ok) throw new Error(inferData?.error?.message || 'AI 태그 추론 실패');
+        statusText = inferData.inferred.length
+          ? `AI가 태그 업데이트: ${inferData.inferred.map((i) => i.name).join(', ')}`
+          : '저장됨 (AI가 판단할 근거를 찾지 못함)';
+      }
+
+      statusEl.textContent = statusText;
+      statusEl.classList.remove('error');
+      resetUserForm();
+      await loadUsers();
+    } catch (err) {
+      statusEl.textContent = err.message;
+      statusEl.classList.add('error');
+    }
+  });
+
+  // ---------- 수신자 ----------
+  function resetRecipientForm() {
+    editingRecipientId = null;
+    document.getElementById('recipientName').value = '';
+    document.getElementById('recipientEmail').value = '';
+    document.getElementById('recipientJobRole').value = '';
+    document.getElementById('recipientSampleText').value = '';
+    setCheckedTagIds('recipientTagBoxes', []);
+    setMode('recipient', 'manual');
+    document.getElementById('recipientSubmitBtn').textContent = '추가';
+    document.getElementById('recipientCancelBtn').classList.add('hidden');
+    document.getElementById('recipientEditBadge').textContent = '';
+  }
+
+  document.getElementById('recipientModeManualBtn').addEventListener('click', () => setMode('recipient', 'manual'));
+  document.getElementById('recipientModeAiBtn').addEventListener('click', () => setMode('recipient', 'ai'));
+
+  async function loadRecipients() {
+    const res = await fetch('/api/recipients');
+    const recipients = await res.json();
+    const tbody = document.getElementById('recipientTableBody');
+    tbody.innerHTML = '';
+    recipients.forEach((r) => {
+      const tr = document.createElement('tr');
+
+      const tdName = document.createElement('td');
+      tdName.textContent = r.name;
+
+      const tdRole = document.createElement('td');
+      tdRole.textContent = r.jobRole || '';
+
+      const tdTags = document.createElement('td');
+      tdTags.appendChild(renderChips(r.tags));
+
+      const tdAction = document.createElement('td');
+      const editBtn = document.createElement('button');
+      editBtn.className = 'link-btn';
+      editBtn.textContent = '수정';
+      editBtn.addEventListener('click', () => {
+        editingRecipientId = r.id;
+        document.getElementById('recipientName').value = r.name || '';
+        document.getElementById('recipientEmail').value = r.email || '';
+        document.getElementById('recipientJobRole').value = r.jobRole || '';
+        setMode('recipient', 'manual');
+        setCheckedTagIds('recipientTagBoxes', r.tags.map((t) => t.id));
+        document.getElementById('recipientSubmitBtn').textContent = '수정 저장';
+        document.getElementById('recipientCancelBtn').classList.remove('hidden');
+        document.getElementById('recipientEditBadge').textContent = `(#${r.id} 수정 중)`;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      tdAction.appendChild(editBtn);
+
+      tr.appendChild(tdName);
+      tr.appendChild(tdRole);
+      tr.appendChild(tdTags);
+      tr.appendChild(tdAction);
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('recipientCancelBtn').addEventListener('click', resetRecipientForm);
+
+  document.getElementById('recipientSubmitBtn').addEventListener('click', async () => {
+    const statusEl = document.getElementById('recipientStatus');
+    const sampleText = document.getElementById('recipientSampleText').value.trim();
+
+    if (recipientTagMode === 'ai' && !sampleText) {
+      statusEl.textContent = 'AI 자동 추론 모드에서는 샘플 텍스트를 입력해야 합니다.';
+      statusEl.classList.add('error');
+      return;
+    }
+
+    const payload = {
+      name: document.getElementById('recipientName').value.trim(),
+      email: document.getElementById('recipientEmail').value.trim(),
+      jobRole: document.getElementById('recipientJobRole').value.trim(),
+    };
+    if (recipientTagMode === 'manual') {
+      payload.tagIds = getCheckedTagIds('recipientTagBoxes');
+    }
+
+    try {
+      const url = editingRecipientId ? `/api/recipients/${editingRecipientId}` : '/api/recipients';
+      const method = editingRecipientId ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || '저장 실패');
+
+      let statusText = '저장됨';
+      if (recipientTagMode === 'ai' && sampleText) {
+        const inferRes = await fetch('/api/tags/infer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityType: 'recipient', entityId: data.id, sampleText }),
+        });
+        const inferData = await inferRes.json();
+        if (!inferRes.ok) throw new Error(inferData?.error?.message || 'AI 태그 추론 실패');
+        statusText = inferData.inferred.length
+          ? `AI가 태그 업데이트: ${inferData.inferred.map((i) => i.name).join(', ')}`
+          : '저장됨 (AI가 판단할 근거를 찾지 못함)';
+      }
+
+      statusEl.textContent = statusText;
+      statusEl.classList.remove('error');
+      resetRecipientForm();
+      await loadRecipients();
+    } catch (err) {
+      statusEl.textContent = err.message;
+      statusEl.classList.add('error');
+    }
+  });
+
+  (async function init() {
+    await loadTags();
+    await loadUsers();
+    await loadRecipients();
+  })();
+</script>
+</body>
+</html>

@@ -1,12 +1,14 @@
-const { Recipient } = require('../models');
+const { Recipient, User } = require('../models');
 const tagService = require('../services/tagService');
 const aiService = require('../services/aiService');
+const { convertTimezone, describeBothZones } = require('../utils/timezoneConverter');
 const ApiError = require('../utils/ApiError');
 
 // FS-005/006 MVP: 수신자에게 붙은 태그를 프롬프트 컨텍스트로 주입해 메시지를 변환
+// + 출력 언어 선택, 발신자/수신자 시간대가 다를 때 기준 시각 자동 변환
 // (메시지 영속화, 맥락 분석, 품질 분석, 원문 비교/수정은 다음 단계에서 구현)
 exports.convert = async (req, res) => {
-  const { originalText, purpose, recipientId } = req.body;
+  const { originalText, purpose, recipientId, senderId, language, referenceDateTime } = req.body;
   if (!originalText || !recipientId) {
     throw ApiError.badRequest('originalText, recipientId는 필수입니다.');
   }
@@ -14,12 +16,44 @@ exports.convert = async (req, res) => {
   const recipient = await Recipient.findByPk(recipientId);
   if (!recipient) throw ApiError.notFound('수신자를 찾을 수 없습니다.');
 
+  let sender = null;
+  if (senderId) {
+    sender = await User.findByPk(senderId);
+    if (!sender) throw ApiError.notFound('발신자를 찾을 수 없습니다.');
+  }
+
   const tags = await tagService.getTagsForEntity('recipient', recipientId);
-  const { convertedText } = await aiService.convertMessage({ originalText, purpose, tags });
+
+  const fromTz = sender?.timezone || 'Asia/Seoul';
+  const toTz = recipient.timezone || 'Asia/Seoul';
+
+  let timeConversion = null;
+  let timeContext = null;
+  if (referenceDateTime && fromTz !== toTz) {
+    timeConversion = convertTimezone({ isoDateTime: referenceDateTime, fromTimezone: fromTz, toTimezone: toTz });
+    timeContext = describeBothZones({
+      isoDateTime: referenceDateTime,
+      fromTimezone: fromTz,
+      toTimezone: toTz,
+      fromLabel: `발신자 시간대 ${fromTz}`,
+      toLabel: `수신자 시간대 ${toTz}`,
+    });
+  }
+
+  const { convertedText } = await aiService.convertMessage({
+    originalText,
+    purpose,
+    tags,
+    language,
+    timeContext,
+  });
 
   res.json({
-    recipient: { id: recipient.id, name: recipient.name, jobRole: recipient.jobRole },
+    recipient: { id: recipient.id, name: recipient.name, jobRole: recipient.jobRole, timezone: toTz },
+    sender: sender ? { id: sender.id, name: sender.name, timezone: fromTz } : null,
     appliedTags: tags.map((t) => ({ category: t.category, name: t.name, label: t.label })),
+    language: language || 'original',
+    timeConversion,
     originalText,
     convertedText,
   });

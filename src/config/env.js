@@ -22,4 +22,10 @@ module.exports = {
     apiKey: process.env.AI_API_KEY,
     model: process.env.AI_MODEL || 'gpt-4o-mini',
   },
+
+  google: {
+    clientId: (process.env.GOOGLE_CLIENT_ID || '').trim(),
+    clientSecret: (process.env.GOOGLE_CLIENT_SECRET || '').trim(),
+    redirectUri: (process.env.GOOGLE_REDIRECT_URI || '').trim(),
+  },
 };

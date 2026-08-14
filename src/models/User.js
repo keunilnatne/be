@@ -13,6 +13,8 @@ User.init(
     jobRole: { type: DataTypes.STRING },
     team: { type: DataTypes.STRING },
     companyId: { type: DataTypes.INTEGER, allowNull: true },
+    // IANA 타임존 문자열 (예: 'Asia/Seoul'). 수신자와 시간대가 다를 때 시간 변환에 사용.
+    timezone: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Asia/Seoul' },
   },
   { sequelize, modelName: 'User', tableName: 'users' }
 );

@@ -6,6 +6,24 @@
 
 ## 2026-08-01
 
+### Added — 출력 언어 선택 / 시간대 변환 / Gmail 연동 (FS-009)
+- `src/utils/timezoneConverter.js` 신규 작성: `convertTimezone()`, `describeBothZones()`. AI 로직과 완전히 분리된 순수 함수 — 발신자/수신자 시간대가 다를 때 기준 시각을 서로의 시간대로 변환. 캘린더 날짜만 따로 비교해 `dayOffset`(전날/다음날 여부)을 정확히 계산하도록 구현.
+- `src/models/User.js`, `src/models/Recipient.js`: `timezone` 필드 추가 (IANA 문자열, 기본값 `Asia/Seoul`).
+- `src/services/aiService.js`: `buildPrompt()`에 `language`(출력 언어 강제), `timeContext`(시간대 변환 설명) 파라미터 추가.
+- `src/controllers/message.controller.js`: `convert`가 `senderId`, `language`, `referenceDateTime`을 받아 발신자/수신자 시간대가 다르면 자동으로 두 시간대 시각을 계산해 AI 프롬프트에 주입. 응답에 `timeConversion`, `language` 필드 추가.
+- Gmail 연동(OAuth + 받은 편지함 조회 + 발송):
+  - `src/services/googleAccountStore.js` 신규 작성: Google OAuth 토큰을 **DB 테이블이 아닌 로컬 JSON 파일**(`src/data/googleAccounts.json`)에 임시 저장 (스키마 변경 없이 빠르게 반복하기 위함 + 민감한 토큰을 공유 Railway DB에 넣지 않기 위함). `.gitignore`에 `src/data/` 추가.
+  - `src/services/googleAuthService.js` 신규 작성: OAuth2 인증 URL 생성, 콜백 토큰 교환, 저장된 토큰으로 인증 클라이언트 재구성(자동 갱신 시 재저장).
+  - `src/services/gmailService.js` 신규 작성: 받은 편지함 목록/상세 조회, 메일 발송 (raw MIME base64url 인코딩).
+  - `src/controllers/auth.controller.js`: `GET /api/auth/google`(동의 화면 리다이렉트), `GET /api/auth/google/callback`(토큰 교환 후 `/gmail.html`로 리다이렉트) 구현.
+  - `src/controllers/gmail.controller.js`, `src/routes/gmail.routes.js` 신규 작성: `/api/gmail/status`, `/api/gmail/messages`, `/api/gmail/messages/:id`, `/api/gmail/send`.
+  - `public/gmail.html` 신규 작성: 사용자 선택 → Gmail 연결 → 받은 편지함 조회 → 메일 작성/발송 데모 페이지.
+- `public/index.html`: 발신자 선택(시간대 표시), 출력 언어 드롭다운, 기준 시각 입력 추가. 결과 화면에 시간대 변환 내역 표시.
+- `public/profiles.html`: 사용자/수신자 폼에 시간대 입력 필드(datalist) 추가.
+
+### Fixed
+- `src/middlewares/errorHandler.js`가 `ApiError` 인스턴스만 `statusCode`를 존중하고, 서비스 레이어에서 관례적으로 쓰던 일반 `Error` + `err.statusCode`(예: `aiService`의 502, `timezoneConverter`의 400, `googleAuthService`의 501/404)는 전부 500으로 뭉개던 문제 수정. `err.statusCode || 500`으로 통일.
+
 ### Added — AI 자동 태그 추론 모드
 - `src/services/aiService.js`: `inferTags()` 추가. 샘플 텍스트를 주면 **기존 태그 taxonomy 안에서만** 카테고리별(tone/verbosity/structure/directness) 최적 태그를 골라 JSON으로 반환하도록 프롬프트 설계 (새 태그를 지어내지 못하게 제약).
 - `src/services/tagService.js`: `mergeInferredTags()` 추가. AI가 추론한 태그를 기존 태그와 **카테고리 단위로 병합** — 이번에 근거가 있는 카테고리만 교체하고, 근거 없는 카테고리는 기존 값 유지.
@@ -58,4 +76,6 @@
 - FS-004 메시지 맥락 분석 (누락 정보 질문 생성)
 - FS-007 메시지 품질 및 협업 적합도 분석
 - FS-008 원문·변환문 비교 및 사용자 수정 (diff 로직 + Message 영속화)
-- FS-009 Gmail 연동, FS-010 팀 메모리 (둘 다 보류 — UX 흐름 미정)
+- FS-010 팀 메모리 (보류 — UX 흐름 미정)
+- FS-009 Gmail 연동: 코드는 완성했으나 **Google Cloud Console에서 OAuth 클라이언트 발급 전까지는 동작 안 함**. `.env`의 `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` 채워야 함.
+- Gmail 토큰은 현재 로컬 JSON 파일(`src/data/googleAccounts.json`)에 평문 저장 중 — 배포/공유 전에 DB 암호화 컬럼 또는 시크릿 스토어로 교체 필요.

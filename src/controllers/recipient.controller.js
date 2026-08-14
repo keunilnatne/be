@@ -10,6 +10,7 @@ async function serializeRecipient(recipient) {
     name: recipient.name,
     email: recipient.email,
     jobRole: recipient.jobRole,
+    timezone: recipient.timezone,
     tags: tags.map((t) => ({ id: t.id, category: t.category, name: t.name, label: t.label })),
   };
 }
@@ -20,12 +21,12 @@ exports.list = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
-  const { name, email, jobRole, tagIds } = req.body;
+  const { name, email, jobRole, timezone, tagIds } = req.body;
   if (!name) {
     throw ApiError.badRequest('name은 필수입니다.');
   }
 
-  const recipient = await Recipient.create({ name, email, jobRole });
+  const recipient = await Recipient.create({ name, email, jobRole, ...(timezone && { timezone }) });
 
   if (Array.isArray(tagIds) && tagIds.length) {
     await tagService.setTagsForEntity('recipient', recipient.id, tagIds);
@@ -44,11 +45,12 @@ exports.update = async (req, res) => {
   const recipient = await Recipient.findByPk(req.params.recipientId);
   if (!recipient) throw ApiError.notFound('수신자를 찾을 수 없습니다.');
 
-  const { name, email, jobRole, tagIds } = req.body;
+  const { name, email, jobRole, timezone, tagIds } = req.body;
   await recipient.update({
     ...(name !== undefined && { name }),
     ...(email !== undefined && { email }),
     ...(jobRole !== undefined && { jobRole }),
+    ...(timezone !== undefined && { timezone }),
   });
 
   if (Array.isArray(tagIds)) {

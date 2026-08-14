@@ -11,6 +11,7 @@ async function serializeUser(user) {
     email: user.email,
     jobRole: user.jobRole,
     team: user.team,
+    timezone: user.timezone,
     company: user.Company ? { id: user.Company.id, name: user.Company.name } : null,
     tags: tags.map((t) => ({ id: t.id, category: t.category, name: t.name, label: t.label })),
   };
@@ -22,12 +23,19 @@ exports.list = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
-  const { name, email, jobRole, team, companyId, tagIds } = req.body;
+  const { name, email, jobRole, team, companyId, timezone, tagIds } = req.body;
   if (!name || !email) {
     throw ApiError.badRequest('name, email은 필수입니다.');
   }
 
-  const user = await User.create({ name, email, jobRole, team, companyId: companyId || null });
+  const user = await User.create({
+    name,
+    email,
+    jobRole,
+    team,
+    companyId: companyId || null,
+    ...(timezone && { timezone }),
+  });
 
   if (Array.isArray(tagIds) && tagIds.length) {
     await tagService.setTagsForEntity('user', user.id, tagIds);
@@ -47,13 +55,14 @@ exports.update = async (req, res) => {
   const user = await User.findByPk(req.params.userId);
   if (!user) throw ApiError.notFound('사용자를 찾을 수 없습니다.');
 
-  const { name, email, jobRole, team, companyId, tagIds } = req.body;
+  const { name, email, jobRole, team, companyId, timezone, tagIds } = req.body;
   await user.update({
     ...(name !== undefined && { name }),
     ...(email !== undefined && { email }),
     ...(jobRole !== undefined && { jobRole }),
     ...(team !== undefined && { team }),
     ...(companyId !== undefined && { companyId }),
+    ...(timezone !== undefined && { timezone }),
   });
 
   if (Array.isArray(tagIds)) {

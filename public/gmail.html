@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gmail 연동 데모</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --border: #e2e4e9;
+    --text: #1b1d23;
+    --muted: #6b7280;
+    --accent: #4f46e5;
+    --accent-bg: #eef0ff;
+    --ok: #16a34a;
+    --ok-bg: #dcfce7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15161a;
+      --card: #1e2027;
+      --border: #33353d;
+      --text: #e7e8ea;
+      --muted: #9aa0aa;
+      --accent: #818cf8;
+      --accent-bg: #262a45;
+      --ok: #4ade80;
+      --ok-bg: #14321f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", Pretendard, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px 20px 80px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  nav { display: flex; gap: 16px; margin-bottom: 20px; font-size: 13px; }
+  nav a { color: var(--muted); text-decoration: none; }
+  nav a.active { color: var(--accent); font-weight: 600; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 14px; }
+
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 5px; }
+  input[type="text"], select, textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    padding: 9px 11px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  textarea { min-height: 100px; resize: vertical; }
+
+  button {
+    background: var(--accent); color: white; border: none; border-radius: 8px;
+    padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  button.ghost {
+    background: transparent; color: var(--muted); border: 1px solid var(--border);
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .connect-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border); margin-top: 10px;
+  }
+  .connect-banner.connected { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+  .status { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .error { color: #e5484d; }
+  .hidden { display: none; }
+
+  .msg-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .msg-item {
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer;
+  }
+  .msg-item:hover { border-color: var(--accent); }
+  .msg-subject { font-weight: 600; font-size: 13px; }
+  .msg-meta { font-size: 11px; color: var(--muted); margin: 2px 0 4px; }
+  .msg-snippet { font-size: 12px; color: var(--muted); }
+  .msg-body {
+    white-space: pre-wrap; font-size: 13px; line-height: 1.6; margin-top: 8px;
+    border-top: 1px solid var(--border); padding-top: 8px;
+  }
+
+  .form-actions { display: flex; gap: 8px; margin-top: 14px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a href="/">변환 데모</a>
+      <a href="/profiles.html">프로필 관리</a>
+      <a href="/gmail.html" class="active">Gmail 연동</a>
+    </nav>
+    <h1>Gmail 연동 데모 (FS-009)</h1>
+    <div class="sub">Google 계정을 연결하면 받은 편지함을 조회하고, AI로 변환한 메시지를 실제로 발송할 수 있습니다.</div>
+
+    <div class="card">
+      <h2>1. 계정 연결</h2>
+      <label>연결할 사용자</label>
+      <select id="userSelect"></select>
+      <div id="connectBanner" class="connect-banner">
+        <span id="connectStatusText">연결 상태 확인 중...</span>
+        <button id="connectBtn">Gmail 연결하기</button>
+      </div>
+      <div class="status" id="connectStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. 받은 편지함</h2>
+      <button id="loadInboxBtn" class="ghost">받은 편지함 불러오기</button>
+      <div class="status" id="inboxStatus"></div>
+      <div class="msg-list" id="inboxList"></div>
+    </div>
+
+    <div class="card">
+      <h2>3. 메일 작성 / 발송</h2>
+      <label>받는 사람</label>
+      <input type="text" id="sendTo" placeholder="someone@example.com" />
+      <label>제목</label>
+      <input type="text" id="sendSubject" placeholder="제목" />
+      <label>본문</label>
+      <textarea id="sendBody" placeholder="변환 데모에서 만든 메시지를 붙여넣어도 됩니다."></textarea>
+      <div class="form-actions">
+        <button id="sendBtn">보내기</button>
+      </div>
+      <div class="status" id="sendStatus"></div>
+    </div>
+  </div>
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const userSelectEl = document.getElementById('userSelect');
+  const connectBannerEl = document.getElementById('connectBanner');
+  const connectStatusTextEl = document.getElementById('connectStatusText');
+  const connectBtnEl = document.getElementById('connectBtn');
+  const connectStatusEl = document.getElementById('connectStatus');
+  const inboxStatusEl = document.getElementById('inboxStatus');
+  const inboxListEl = document.getElementById('inboxList');
+  const sendStatusEl = document.getElementById('sendStatus');
+
+  const API_BASE = (window.location.protocol === 'file:' || (window.location.port !== '4000' && !window.location.host.includes('railway')))
+    ? 'http://localhost:4000'
+    : '';
+
+  function api(path) {
+    return API_BASE + path;
+  }
+
+  function formatError(err) {
+    if (err.name === 'TypeError' && (err.message === 'Failed to fetch' || err.message.includes('fetch'))) {
+      return '백엔드 서버(http://localhost:4000)에 연결할 수 없습니다. 서버가 실행 중인지 확인하거나 http://localhost:4000/gmail.html 주소로 접속해 주세요.';
+    }
+    return err.message || '요청 처리 중 오류가 발생했습니다.';
+  }
+
+  function currentUserId() {
+    return userSelectEl.value;
+  }
+
+  async function loadUsers() {
+    try {
+      const res = await fetch(api('/api/users'));
+      const users = await res.json();
+      userSelectEl.innerHTML = '';
+      users.forEach((u) => {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = `${u.name} (${u.email})`;
+        userSelectEl.appendChild(opt);
+      });
+
+      const paramUserId = params.get('userId');
+      if (paramUserId) userSelectEl.value = paramUserId;
+
+      await refreshStatus();
+    } catch (err) {
+      connectStatusTextEl.textContent = formatError(err);
+    }
+  }
+
+  async function refreshStatus() {
+    const userId = currentUserId();
+    if (!userId) return;
+
+    connectStatusTextEl.textContent = '연결 상태 확인 중...';
+    connectBannerEl.classList.remove('connected');
+
+    try {
+      const res = await fetch(api(`/api/gmail/status?userId=${userId}`));
+      const data = await res.json();
+
+      if (data.connected) {
+        connectStatusTextEl.textContent = `연결됨: ${data.email}`;
+        connectBannerEl.classList.add('connected');
+        connectBtnEl.textContent = '다시 연결하기';
+      } else {
+        connectStatusTextEl.textContent = '아직 연결되지 않았습니다.';
+        connectBtnEl.textContent = 'Gmail 연결하기';
+      }
+    } catch (err) {
+      connectStatusTextEl.textContent = formatError(err);
+    }
+  }
+
+  userSelectEl.addEventListener('change', refreshStatus);
+
+  connectBtnEl.addEventListener('click', () => {
+    const userId = currentUserId();
+    if (!userId) return;
+    window.location.href = api(`/api/auth/google?userId=${userId}`);
+  });
+
+  document.getElementById('loadInboxBtn').addEventListener('click', async () => {
+    const userId = currentUserId();
+    if (!userId) return;
+
+    inboxStatusEl.textContent = '불러오는 중...';
+    inboxStatusEl.classList.remove('error');
+    inboxListEl.innerHTML = '';
+
+    try {
+      const res = await fetch(api(`/api/gmail/messages?userId=${userId}`));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || '받은 편지함을 불러오지 못했습니다.');
+
+      inboxStatusEl.textContent = `${data.length}개 메일`;
+      data.forEach((m) => {
+        const item = document.createElement('div');
+        item.className = 'msg-item';
+
+        const subject = document.createElement('div');
+        subject.className = 'msg-subject';
+        subject.textContent = m.subject;
+
+        const meta = document.createElement('div');
+        meta.className = 'msg-meta';
+        meta.textContent = `${m.from} · ${m.date}`;
+
+        const snippet = document.createElement('div');
+        snippet.className = 'msg-snippet';
+        snippet.textContent = m.snippet;
+
+        item.appendChild(subject);
+        item.appendChild(meta);
+        item.appendChild(snippet);
+
+        item.addEventListener('click', async () => {
+          const existingBody = item.querySelector('.msg-body');
+          if (existingBody) {
+            existingBody.remove();
+            return;
+          }
+          try {
+            const detailRes = await fetch(api(`/api/gmail/messages/${m.id}?userId=${userId}`));
+            const detail = await detailRes.json();
+            const bodyEl = document.createElement('div');
+            bodyEl.className = 'msg-body';
+            bodyEl.textContent = detail.body;
+            item.appendChild(bodyEl);
+          } catch (err) {
+            alert(formatError(err));
+          }
+        });
+
+        inboxListEl.appendChild(item);
+      });
+    } catch (err) {
+      inboxStatusEl.textContent = formatError(err);
+      inboxStatusEl.classList.add('error');
+    }
+  });
+
+  document.getElementById('sendBtn').addEventListener('click', async () => {
+    const userId = currentUserId();
+    const to = document.getElementById('sendTo').value.trim();
+    const subject = document.getElementById('sendSubject').value.trim();
+    const body = document.getElementById('sendBody').value.trim();
+
+    if (!userId || !to || !subject || !body) {
+      sendStatusEl.textContent = '받는 사람/제목/본문을 모두 입력하세요.';
+      sendStatusEl.classList.add('error');
+      return;
+    }
+
+    sendStatusEl.textContent = '보내는 중...';
+    sendStatusEl.classList.remove('error');
+
+    try {
+      const res = await fetch(api('/api/gmail/send'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, to, subject, body }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || '발송에 실패했습니다.');
+
+      sendStatusEl.textContent = '발송 완료!';
+    } catch (err) {
+      sendStatusEl.textContent = formatError(err);
+      sendStatusEl.classList.add('error');
+    }
+  });
+
+  if (params.get('connected') === '1') {
+    connectStatusEl.textContent = 'Gmail 계정이 연결되었습니다.';
+  }
+
+  loadUsers();
+</script>
+</body>
+</html>

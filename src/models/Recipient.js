@@ -12,6 +12,8 @@ Recipient.init(
     name: { type: DataTypes.STRING, allowNull: false },
     email: { type: DataTypes.STRING },
     jobRole: { type: DataTypes.STRING },
+    // IANA 타임존 문자열 (예: 'America/New_York'). 발신자와 다르면 시간 변환에 사용.
+    timezone: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Asia/Seoul' },
   },
   { sequelize, modelName: 'Recipient', tableName: 'recipients' }
 );

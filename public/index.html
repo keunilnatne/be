@@ -72,7 +72,7 @@
   }
 
   label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
-  input[type="text"], textarea {
+  input[type="text"], input[type="datetime-local"], textarea, select {
     width: 100%;
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -84,6 +84,9 @@
     resize: vertical;
   }
   textarea { min-height: 110px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 600px) { .row2 { grid-template-columns: 1fr; } }
+  .field-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
   button {
     margin-top: 16px;
@@ -125,29 +128,57 @@
     <nav>
       <a href="/" class="active">변환 데모</a>
       <a href="/profiles.html">프로필 관리</a>
+      <a href="/gmail.html">Gmail 연동</a>
     </nav>
     <h1>태그 기반 메시지 변환 데모</h1>
     <div class="sub">AI 학습 없이, 수신자에게 붙은 태그(어조/분량/구조/직설성)로 같은 원문을 다르게 변환합니다.</div>
 
     <div class="card">
-      <h2>1. 수신자 선택</h2>
+      <h2>1. 발신자 선택 (선택 사항 - 시간대 변환에 사용)</h2>
+      <select id="senderSelect">
+        <option value="">선택 안 함</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <h2>2. 수신자 선택</h2>
       <div id="recipients" class="recipients"></div>
     </div>
 
     <div class="card">
-      <h2>2. 원문 작성</h2>
+      <h2>3. 원문 작성</h2>
       <label for="purpose">메시지 목적 (선택)</label>
       <input id="purpose" type="text" placeholder="예: 디자인 시안 피드백 요청" />
 
       <label for="originalText">원문 메시지</label>
       <textarea id="originalText">이번에 새로 만든 로그인 화면 디자인 시안 좀 봐주세요. 다음주 화요일까지 피드백 주시면 좋겠고, 색상이랑 버튼 배치가 좀 애매한 것 같아서 의견 듣고 싶습니다.</textarea>
 
+      <div class="row2">
+        <div>
+          <label for="languageSelect">출력 언어</label>
+          <select id="languageSelect">
+            <option value="">원본 언어 유지</option>
+            <option value="한국어">한국어</option>
+            <option value="영어(English)">영어 (English)</option>
+            <option value="일본어(日本語)">일본어 (日本語)</option>
+            <option value="중국어(中文)">중국어 (中文)</option>
+            <option value="스페인어(Español)">스페인어 (Español)</option>
+          </select>
+        </div>
+        <div>
+          <label for="referenceDateTime">기준 시각 (선택, 발신자 기준)</label>
+          <input id="referenceDateTime" type="datetime-local" />
+          <div class="field-hint">발신자/수신자 시간대가 다를 때만 변환에 사용됩니다.</div>
+        </div>
+      </div>
+
       <button id="convertBtn" disabled>변환하기</button>
       <div id="status" class="status"></div>
     </div>
 
     <div id="resultCard" class="card hidden">
-      <h2>3. 결과 비교</h2>
+      <h2>4. 결과 비교</h2>
+      <div id="timeConversionBox" class="field-hint hidden" style="margin-bottom:10px;"></div>
       <div class="chips" id="appliedTags" style="margin-bottom:16px;"></div>
       <div class="result-grid">
         <div class="result-box">
@@ -166,12 +197,45 @@
   let selectedRecipientId = null;
 
   const recipientsEl = document.getElementById('recipients');
+  const senderSelectEl = document.getElementById('senderSelect');
   const convertBtn = document.getElementById('convertBtn');
   const statusEl = document.getElementById('status');
   const resultCard = document.getElementById('resultCard');
   const appliedTagsEl = document.getElementById('appliedTags');
+  const timeConversionBoxEl = document.getElementById('timeConversionBox');
   const originalOutEl = document.getElementById('originalOut');
   const convertedOutEl = document.getElementById('convertedOut');
+
+  const API_BASE = (window.location.protocol === 'file:' || (window.location.port !== '4000' && !window.location.host.includes('railway')))
+    ? 'http://localhost:4000'
+    : '';
+
+  function api(path) {
+    return API_BASE + path;
+  }
+
+  function formatError(err) {
+    if (err.name === 'TypeError' && (err.message === 'Failed to fetch' || err.message.includes('fetch'))) {
+      return '백엔드 서버(http://localhost:4000)에 연결할 수 없습니다. 서버가 실행 중인지, http://localhost:4000 주소로 접속하셨는지 확인해 주세요.';
+    }
+    return err.message || '요청 처리 중 오류가 발생했습니다.';
+  }
+
+  async function loadSenders() {
+    try {
+      const res = await fetch(api('/api/users'));
+      const users = await res.json();
+      users.forEach((u) => {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = `${u.name} (${u.timezone})`;
+        senderSelectEl.appendChild(opt);
+      });
+    } catch (err) {
+      statusEl.textContent = formatError(err);
+      statusEl.classList.add('error');
+    }
+  }
 
   function renderChips(container, tags) {
     container.innerHTML = '';
@@ -189,40 +253,45 @@
   }
 
   async function loadRecipients() {
-    const res = await fetch('/api/recipients');
-    const recipients = await res.json();
+    try {
+      const res = await fetch(api('/api/recipients'));
+      const recipients = await res.json();
 
-    recipientsEl.innerHTML = '';
-    recipients.forEach((r) => {
-      const card = document.createElement('div');
-      card.className = 'recipient';
-      card.dataset.id = r.id;
+      recipientsEl.innerHTML = '';
+      recipients.forEach((r) => {
+        const card = document.createElement('div');
+        card.className = 'recipient';
+        card.dataset.id = r.id;
 
-      const name = document.createElement('div');
-      name.className = 'name';
-      name.textContent = r.name;
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = r.name;
 
-      const role = document.createElement('div');
-      role.className = 'role';
-      role.textContent = r.jobRole || '';
+        const role = document.createElement('div');
+        role.className = 'role';
+        role.textContent = r.jobRole || '';
 
-      const chips = document.createElement('div');
-      chips.className = 'chips';
-      renderChips(chips, r.tags);
+        const chips = document.createElement('div');
+        chips.className = 'chips';
+        renderChips(chips, r.tags);
 
-      card.appendChild(name);
-      card.appendChild(role);
-      card.appendChild(chips);
+        card.appendChild(name);
+        card.appendChild(role);
+        card.appendChild(chips);
 
-      card.addEventListener('click', () => {
-        document.querySelectorAll('.recipient').forEach((el) => el.classList.remove('selected'));
-        card.classList.add('selected');
-        selectedRecipientId = r.id;
-        updateConvertButton();
+        card.addEventListener('click', () => {
+          document.querySelectorAll('.recipient').forEach((el) => el.classList.remove('selected'));
+          card.classList.add('selected');
+          selectedRecipientId = r.id;
+          updateConvertButton();
+        });
+
+        recipientsEl.appendChild(card);
       });
-
-      recipientsEl.appendChild(card);
-    });
+    } catch (err) {
+      statusEl.textContent = formatError(err);
+      statusEl.classList.add('error');
+    }
   }
 
   document.getElementById('originalText').addEventListener('input', updateConvertButton);
@@ -230,6 +299,10 @@
   convertBtn.addEventListener('click', async () => {
     const originalText = document.getElementById('originalText').value.trim();
     const purpose = document.getElementById('purpose').value.trim();
+    const language = document.getElementById('languageSelect').value || undefined;
+    const senderId = senderSelectEl.value || undefined;
+    const referenceDateTimeRaw = document.getElementById('referenceDateTime').value;
+    const referenceDateTime = referenceDateTimeRaw || undefined;
 
     convertBtn.disabled = true;
     statusEl.textContent = 'AI가 변환하는 중...';
@@ -237,10 +310,17 @@
     resultCard.classList.add('hidden');
 
     try {
-      const res = await fetch('/api/messages/convert', {
+      const res = await fetch(api('/api/messages/convert'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ originalText, purpose, recipientId: selectedRecipientId }),
+        body: JSON.stringify({
+          originalText,
+          purpose,
+          recipientId: selectedRecipientId,
+          senderId,
+          language,
+          referenceDateTime,
+        }),
       });
       const data = await res.json();
 
@@ -251,16 +331,28 @@
       renderChips(appliedTagsEl, data.appliedTags);
       originalOutEl.textContent = data.originalText;
       convertedOutEl.textContent = data.convertedText;
+
+      if (data.timeConversion) {
+        const tc = data.timeConversion;
+        timeConversionBoxEl.textContent =
+          `🕐 시간대 변환: ${tc.source.label} [발신자 ${tc.source.timezone}] → ` +
+          `${tc.target.label}${tc.dayOffset > 0 ? ' (다음날)' : tc.dayOffset < 0 ? ' (전날)' : ''} [수신자 ${tc.target.timezone}]`;
+        timeConversionBoxEl.classList.remove('hidden');
+      } else {
+        timeConversionBoxEl.classList.add('hidden');
+      }
+
       resultCard.classList.remove('hidden');
       statusEl.textContent = '';
     } catch (err) {
-      statusEl.textContent = err.message;
+      statusEl.textContent = formatError(err);
       statusEl.classList.add('error');
     } finally {
       convertBtn.disabled = false;
     }
   });
 
+  loadSenders();
   loadRecipients();
 </script>
 </body>

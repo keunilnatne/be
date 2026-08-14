@@ -123,7 +123,22 @@
     <nav>
       <a href="/">변환 데모</a>
       <a href="/profiles.html" class="active">프로필 관리</a>
+      <a href="/gmail.html">Gmail 연동</a>
     </nav>
+    <datalist id="timezoneOptions">
+      <option value="Asia/Seoul"></option>
+      <option value="America/New_York"></option>
+      <option value="America/Los_Angeles"></option>
+      <option value="America/Chicago"></option>
+      <option value="Europe/London"></option>
+      <option value="Europe/Paris"></option>
+      <option value="Asia/Tokyo"></option>
+      <option value="Asia/Shanghai"></option>
+      <option value="Asia/Singapore"></option>
+      <option value="Australia/Sydney"></option>
+      <option value="Pacific/Auckland"></option>
+      <option value="UTC"></option>
+    </datalist>
     <h1>프로필 관리 데모 (FS-001 / FS-003 / 태그 부착)</h1>
     <div class="sub">사용자·수신자 프로필을 만들고 태그를 붙여봅니다. 여기서 만든 수신자는 변환 데모 페이지에도 바로 나타납니다.</div>
 
@@ -144,6 +159,8 @@
           <input type="text" id="userJobRole" placeholder="예: 백엔드 개발자" />
           <label>소속 팀</label>
           <input type="text" id="userTeam" placeholder="예: 플랫폼팀" />
+          <label>시간대</label>
+          <input type="text" id="userTimezone" list="timezoneOptions" placeholder="Asia/Seoul" />
           <label>선호 스타일 태그</label>
           <div class="mode-toggle">
             <button type="button" class="mode-btn active" id="userModeManualBtn">수동 선택</button>
@@ -179,6 +196,8 @@
           <input type="text" id="recipientEmail" />
           <label>직무</label>
           <input type="text" id="recipientJobRole" placeholder="예: PM" />
+          <label>시간대</label>
+          <input type="text" id="recipientTimezone" list="timezoneOptions" placeholder="Asia/Seoul" />
           <label>선호 스타일 태그</label>
           <div class="mode-toggle">
             <button type="button" class="mode-btn active" id="recipientModeManualBtn">수동 선택</button>
@@ -213,6 +232,21 @@
   let editingRecipientId = null;
   let userTagMode = 'manual';
   let recipientTagMode = 'manual';
+
+  const API_BASE = (window.location.protocol === 'file:' || (window.location.port !== '4000' && !window.location.host.includes('railway')))
+    ? 'http://localhost:4000'
+    : '';
+
+  function api(path) {
+    return API_BASE + path;
+  }
+
+  function formatError(err) {
+    if (err.name === 'TypeError' && (err.message === 'Failed to fetch' || err.message.includes('fetch'))) {
+      return '백엔드 서버(http://localhost:4000)에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요.';
+    }
+    return err.message || '요청 처리 중 오류가 발생했습니다.';
+  }
 
   function setMode(prefix, mode) {
     if (prefix === 'user') userTagMode = mode;
@@ -293,11 +327,15 @@
   }
 
   async function loadTags() {
-    const res = await fetch('/api/tags');
-    tags = await res.json();
-    renderTagReference();
-    renderTagCheckboxes('userTagBoxes');
-    renderTagCheckboxes('recipientTagBoxes');
+    try {
+      const res = await fetch(api('/api/tags'));
+      tags = await res.json();
+      renderTagReference();
+      renderTagCheckboxes('userTagBoxes');
+      renderTagCheckboxes('recipientTagBoxes');
+    } catch (err) {
+      console.error('loadTags failed:', err);
+    }
   }
 
   // ---------- 사용자 ----------
@@ -307,6 +345,7 @@
     document.getElementById('userEmail').value = '';
     document.getElementById('userJobRole').value = '';
     document.getElementById('userTeam').value = '';
+    document.getElementById('userTimezone').value = '';
     document.getElementById('userSampleText').value = '';
     setCheckedTagIds('userTagBoxes', []);
     setMode('user', 'manual');
@@ -319,47 +358,52 @@
   document.getElementById('userModeAiBtn').addEventListener('click', () => setMode('user', 'ai'));
 
   async function loadUsers() {
-    const res = await fetch('/api/users');
-    const users = await res.json();
-    const tbody = document.getElementById('userTableBody');
-    tbody.innerHTML = '';
-    users.forEach((u) => {
-      const tr = document.createElement('tr');
+    try {
+      const res = await fetch(api('/api/users'));
+      const users = await res.json();
+      const tbody = document.getElementById('userTableBody');
+      tbody.innerHTML = '';
+      users.forEach((u) => {
+        const tr = document.createElement('tr');
 
-      const tdName = document.createElement('td');
-      tdName.textContent = u.name;
+        const tdName = document.createElement('td');
+        tdName.textContent = u.name;
 
-      const tdRole = document.createElement('td');
-      tdRole.textContent = [u.jobRole, u.team].filter(Boolean).join(' · ');
+        const tdRole = document.createElement('td');
+        tdRole.textContent = [u.jobRole, u.team].filter(Boolean).join(' · ');
 
-      const tdTags = document.createElement('td');
-      tdTags.appendChild(renderChips(u.tags));
+        const tdTags = document.createElement('td');
+        tdTags.appendChild(renderChips(u.tags));
 
-      const tdAction = document.createElement('td');
-      const editBtn = document.createElement('button');
-      editBtn.className = 'link-btn';
-      editBtn.textContent = '수정';
-      editBtn.addEventListener('click', () => {
-        editingUserId = u.id;
-        document.getElementById('userName').value = u.name || '';
-        document.getElementById('userEmail').value = u.email || '';
-        document.getElementById('userJobRole').value = u.jobRole || '';
-        document.getElementById('userTeam').value = u.team || '';
-        setMode('user', 'manual');
-        setCheckedTagIds('userTagBoxes', u.tags.map((t) => t.id));
-        document.getElementById('userSubmitBtn').textContent = '수정 저장';
-        document.getElementById('userCancelBtn').classList.remove('hidden');
-        document.getElementById('userEditBadge').textContent = `(#${u.id} 수정 중)`;
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        const tdAction = document.createElement('td');
+        const editBtn = document.createElement('button');
+        editBtn.className = 'link-btn';
+        editBtn.textContent = '수정';
+        editBtn.addEventListener('click', () => {
+          editingUserId = u.id;
+          document.getElementById('userName').value = u.name || '';
+          document.getElementById('userEmail').value = u.email || '';
+          document.getElementById('userJobRole').value = u.jobRole || '';
+          document.getElementById('userTeam').value = u.team || '';
+          document.getElementById('userTimezone').value = u.timezone || '';
+          setMode('user', 'manual');
+          setCheckedTagIds('userTagBoxes', u.tags.map((t) => t.id));
+          document.getElementById('userSubmitBtn').textContent = '수정 저장';
+          document.getElementById('userCancelBtn').classList.remove('hidden');
+          document.getElementById('userEditBadge').textContent = `(#${u.id} 수정 중)`;
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        tdAction.appendChild(editBtn);
+
+        tr.appendChild(tdName);
+        tr.appendChild(tdRole);
+        tr.appendChild(tdTags);
+        tr.appendChild(tdAction);
+        tbody.appendChild(tr);
       });
-      tdAction.appendChild(editBtn);
-
-      tr.appendChild(tdName);
-      tr.appendChild(tdRole);
-      tr.appendChild(tdTags);
-      tr.appendChild(tdAction);
-      tbody.appendChild(tr);
-    });
+    } catch (err) {
+      console.error('loadUsers failed:', err);
+    }
   }
 
   document.getElementById('userCancelBtn').addEventListener('click', resetUserForm);
@@ -379,13 +423,14 @@
       email: document.getElementById('userEmail').value.trim(),
       jobRole: document.getElementById('userJobRole').value.trim(),
       team: document.getElementById('userTeam').value.trim(),
+      timezone: document.getElementById('userTimezone').value.trim() || undefined,
     };
     if (userTagMode === 'manual') {
       payload.tagIds = getCheckedTagIds('userTagBoxes');
     }
 
     try {
-      const url = editingUserId ? `/api/users/${editingUserId}` : '/api/users';
+      const url = editingUserId ? api(`/api/users/${editingUserId}`) : api('/api/users');
       const method = editingUserId ? 'PUT' : 'POST';
       const res = await fetch(url, {
         method,
@@ -397,7 +442,7 @@
 
       let statusText = '저장됨';
       if (userTagMode === 'ai' && sampleText) {
-        const inferRes = await fetch('/api/tags/infer', {
+        const inferRes = await fetch(api('/api/tags/infer'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ entityType: 'user', entityId: data.id, sampleText }),
@@ -414,7 +459,7 @@
       resetUserForm();
       await loadUsers();
     } catch (err) {
-      statusEl.textContent = err.message;
+      statusEl.textContent = formatError(err);
       statusEl.classList.add('error');
     }
   });
@@ -425,6 +470,7 @@
     document.getElementById('recipientName').value = '';
     document.getElementById('recipientEmail').value = '';
     document.getElementById('recipientJobRole').value = '';
+    document.getElementById('recipientTimezone').value = '';
     document.getElementById('recipientSampleText').value = '';
     setCheckedTagIds('recipientTagBoxes', []);
     setMode('recipient', 'manual');
@@ -437,46 +483,51 @@
   document.getElementById('recipientModeAiBtn').addEventListener('click', () => setMode('recipient', 'ai'));
 
   async function loadRecipients() {
-    const res = await fetch('/api/recipients');
-    const recipients = await res.json();
-    const tbody = document.getElementById('recipientTableBody');
-    tbody.innerHTML = '';
-    recipients.forEach((r) => {
-      const tr = document.createElement('tr');
+    try {
+      const res = await fetch(api('/api/recipients'));
+      const recipients = await res.json();
+      const tbody = document.getElementById('recipientTableBody');
+      tbody.innerHTML = '';
+      recipients.forEach((r) => {
+        const tr = document.createElement('tr');
 
-      const tdName = document.createElement('td');
-      tdName.textContent = r.name;
+        const tdName = document.createElement('td');
+        tdName.textContent = r.name;
 
-      const tdRole = document.createElement('td');
-      tdRole.textContent = r.jobRole || '';
+        const tdRole = document.createElement('td');
+        tdRole.textContent = r.jobRole || '';
 
-      const tdTags = document.createElement('td');
-      tdTags.appendChild(renderChips(r.tags));
+        const tdTags = document.createElement('td');
+        tdTags.appendChild(renderChips(r.tags));
 
-      const tdAction = document.createElement('td');
-      const editBtn = document.createElement('button');
-      editBtn.className = 'link-btn';
-      editBtn.textContent = '수정';
-      editBtn.addEventListener('click', () => {
-        editingRecipientId = r.id;
-        document.getElementById('recipientName').value = r.name || '';
-        document.getElementById('recipientEmail').value = r.email || '';
-        document.getElementById('recipientJobRole').value = r.jobRole || '';
-        setMode('recipient', 'manual');
-        setCheckedTagIds('recipientTagBoxes', r.tags.map((t) => t.id));
-        document.getElementById('recipientSubmitBtn').textContent = '수정 저장';
-        document.getElementById('recipientCancelBtn').classList.remove('hidden');
-        document.getElementById('recipientEditBadge').textContent = `(#${r.id} 수정 중)`;
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        const tdAction = document.createElement('td');
+        const editBtn = document.createElement('button');
+        editBtn.className = 'link-btn';
+        editBtn.textContent = '수정';
+        editBtn.addEventListener('click', () => {
+          editingRecipientId = r.id;
+          document.getElementById('recipientName').value = r.name || '';
+          document.getElementById('recipientEmail').value = r.email || '';
+          document.getElementById('recipientJobRole').value = r.jobRole || '';
+          document.getElementById('recipientTimezone').value = r.timezone || '';
+          setMode('recipient', 'manual');
+          setCheckedTagIds('recipientTagBoxes', r.tags.map((t) => t.id));
+          document.getElementById('recipientSubmitBtn').textContent = '수정 저장';
+          document.getElementById('recipientCancelBtn').classList.remove('hidden');
+          document.getElementById('recipientEditBadge').textContent = `(#${r.id} 수정 중)`;
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        tdAction.appendChild(editBtn);
+
+        tr.appendChild(tdName);
+        tr.appendChild(tdRole);
+        tr.appendChild(tdTags);
+        tr.appendChild(tdAction);
+        tbody.appendChild(tr);
       });
-      tdAction.appendChild(editBtn);
-
-      tr.appendChild(tdName);
-      tr.appendChild(tdRole);
-      tr.appendChild(tdTags);
-      tr.appendChild(tdAction);
-      tbody.appendChild(tr);
-    });
+    } catch (err) {
+      console.error('loadRecipients failed:', err);
+    }
   }
 
   document.getElementById('recipientCancelBtn').addEventListener('click', resetRecipientForm);
@@ -495,13 +546,14 @@
       name: document.getElementById('recipientName').value.trim(),
       email: document.getElementById('recipientEmail').value.trim(),
       jobRole: document.getElementById('recipientJobRole').value.trim(),
+      timezone: document.getElementById('recipientTimezone').value.trim() || undefined,
     };
     if (recipientTagMode === 'manual') {
       payload.tagIds = getCheckedTagIds('recipientTagBoxes');
     }
 
     try {
-      const url = editingRecipientId ? `/api/recipients/${editingRecipientId}` : '/api/recipients';
+      const url = editingRecipientId ? api(`/api/recipients/${editingRecipientId}`) : api('/api/recipients');
       const method = editingRecipientId ? 'PUT' : 'POST';
       const res = await fetch(url, {
         method,
@@ -513,7 +565,7 @@
 
       let statusText = '저장됨';
       if (recipientTagMode === 'ai' && sampleText) {
-        const inferRes = await fetch('/api/tags/infer', {
+        const inferRes = await fetch(api('/api/tags/infer'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ entityType: 'recipient', entityId: data.id, sampleText }),
@@ -530,7 +582,7 @@
       resetRecipientForm();
       await loadRecipients();
     } catch (err) {
-      statusEl.textContent = err.message;
+      statusEl.textContent = formatError(err);
       statusEl.classList.add('error');
     }
   });

@@ -5,6 +5,7 @@ const router = Router();
 
 router.post('/signup', authController.signup);
 router.post('/login', authController.login);
+router.get('/google', authController.googleAuthUrl);
 router.get('/google/callback', authController.googleCallback);
 
 module.exports = router;

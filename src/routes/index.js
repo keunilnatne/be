@@ -6,6 +6,7 @@ const companyRoutes = require('./company.routes');
 const recipientRoutes = require('./recipient.routes');
 const messageRoutes = require('./message.routes');
 const tagRoutes = require('./tag.routes');
+const gmailRoutes = require('./gmail.routes');
 
 const router = Router();
 
@@ -24,5 +25,8 @@ router.use('/messages', messageRoutes);
 
 // 태그 마스터 (직무/문체/조직 특성 등)
 router.use('/tags', tagRoutes);
+
+// FS-009: Gmail 연동 (받은 편지함 조회, 발송)
+router.use('/gmail', gmailRoutes);
 
 module.exports = router;

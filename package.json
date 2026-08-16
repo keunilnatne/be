@@ -14,6 +14,7 @@
     "test": "node --test --test-isolation=none",
     "test:db:messages": "node src/scripts/verifyMessageModels.js",
     "test:integration:optimize": "node src/scripts/verifyMessageOptimization.js",
+    "test:db:team-memory": "node src/scripts/verifyTeamMemory.js",
     "db:seed": "node src/scripts/seedDemo.js"
   },
   "dependencies": {

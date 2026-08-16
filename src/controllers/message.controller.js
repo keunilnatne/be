@@ -1,10 +1,74 @@
 const { Recipient } = require('../models');
 const tagService = require('../services/tagService');
 const aiService = require('../services/aiService');
+const messageOptimizationService = require('../services/messageOptimizationService');
 const ApiError = require('../utils/ApiError');
 
-// FS-005/006 MVP: 수신자에게 붙은 태그를 프롬프트 컨텍스트로 주입해 메시지를 변환
-// (메시지 영속화, 맥락 분석, 품질 분석, 원문 비교/수정은 다음 단계에서 구현)
+const MAX_RECIPIENTS = 20;
+
+function normalizeRecipientIds(body) {
+  const candidates = Array.isArray(body.recipientIds)
+    ? body.recipientIds
+    : Array.isArray(body.recipients)
+      ? body.recipients.map((recipient) => recipient?.id ?? recipient)
+      : [];
+  const ids = [...new Set(candidates.map(Number))];
+
+  if (!ids.length || ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+    throw ApiError.badRequest('유효한 수신자를 한 명 이상 선택해야 합니다.');
+  }
+  if (ids.length > MAX_RECIPIENTS) {
+    throw ApiError.badRequest(`수신자는 한 번에 최대 ${MAX_RECIPIENTS}명까지 선택할 수 있습니다.`);
+  }
+  return ids;
+}
+
+function createOptimizeHandler(optimizeMany = messageOptimizationService.optimizeMany) {
+  return async (req, res) => {
+  const subject = String(req.body.subject || '').trim();
+  const body = String(req.body.body || '').trim();
+  if (!subject || !body) throw ApiError.badRequest('subject, body는 필수입니다.');
+
+  const recipientIds = normalizeRecipientIds(req.body);
+  const { message, results } = await optimizeMany({
+    senderId: req.user.id,
+    recipientIds,
+    subject,
+    body,
+    purpose: req.body.purpose,
+    priority: req.body.priority,
+  });
+
+  const serializedResults = results.map((result) => ({
+    id: result.id,
+    recipientId: result.recipientId,
+    recipientName: result.recipientName,
+    recipientEmail: result.recipientEmail,
+    subject: result.optimizedSubject,
+    body: result.optimizedBody,
+    appliedContext: result.appliedContext,
+    qualityScore: result.qualityScore,
+    status: result.status,
+    error: result.errorMessage,
+  }));
+  const firstSuccess = serializedResults.find((result) => result.status === 'converted');
+
+  res.status(201).json({
+    messageId: message.id,
+    originalSubject: message.originalSubject,
+    originalBody: message.originalBody,
+    results: serializedResults,
+    // 현재 프론트의 단일 결과 계약과 임시 호환한다.
+    subject: firstSuccess?.subject || null,
+    body: firstSuccess?.body || null,
+  });
+  };
+}
+
+exports.createOptimizeHandler = createOptimizeHandler;
+exports.optimize = createOptimizeHandler();
+
+// 기존 단일 수신자 태그 기반 변환 API는 호환성을 위해 유지한다.
 exports.convert = async (req, res) => {
   const { originalText, purpose, recipientId } = req.body;
   if (!originalText || !recipientId) {
@@ -19,7 +83,11 @@ exports.convert = async (req, res) => {
 
   res.json({
     recipient: { id: recipient.id, name: recipient.name, jobRole: recipient.jobRole },
-    appliedTags: tags.map((t) => ({ category: t.category, name: t.name, label: t.label })),
+    appliedTags: tags.map((tag) => ({
+      category: tag.category,
+      name: tag.name,
+      label: tag.label,
+    })),
     originalText,
     convertedText,
   });
@@ -30,7 +98,7 @@ exports.createDraft = async (req, res) => {
 };
 
 exports.analyzeContext = async (req, res) => {
-  res.status(501).json({ message: 'TODO: 맥락 분석/누락 정보 질문 생성 구현 필요 (FS-004)' });
+  res.status(501).json({ message: 'TODO: 맥락 분석 및 보완 질문 생성 구현 필요 (FS-004)' });
 };
 
 exports.analyzeQuality = async (req, res) => {
@@ -38,7 +106,7 @@ exports.analyzeQuality = async (req, res) => {
 };
 
 exports.getOne = async (req, res) => {
-  res.status(501).json({ message: 'TODO: 원문/변환문 비교 조회 구현 필요 (FS-008)' });
+  res.status(501).json({ message: 'TODO: 원문 및 변환문 비교 조회 구현 필요 (FS-008)' });
 };
 
 exports.saveRevision = async (req, res) => {

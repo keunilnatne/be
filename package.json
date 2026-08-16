@@ -13,6 +13,7 @@
     "start": "node src/server.js",
     "test": "node --test --test-isolation=none",
     "test:db:messages": "node src/scripts/verifyMessageModels.js",
+    "test:integration:optimize": "node src/scripts/verifyMessageOptimization.js",
     "db:seed": "node src/scripts/seedDemo.js"
   },
   "dependencies": {

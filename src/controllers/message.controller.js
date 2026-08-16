@@ -2,6 +2,7 @@ const { Recipient } = require('../models');
 const tagService = require('../services/tagService');
 const aiService = require('../services/aiService');
 const messageOptimizationService = require('../services/messageOptimizationService');
+const messageSendService = require('../services/messageSendService');
 const ApiError = require('../utils/ApiError');
 
 const MAX_RECIPIENTS = 20;
@@ -67,6 +68,40 @@ function createOptimizeHandler(optimizeMany = messageOptimizationService.optimiz
 
 exports.createOptimizeHandler = createOptimizeHandler;
 exports.optimize = createOptimizeHandler();
+
+function createSendHandler(sendMany = messageSendService.sendMany) {
+  return async (req, res) => {
+    const messageId = Number(req.body.messageId);
+    if (!Number.isInteger(messageId) || messageId <= 0) {
+      throw ApiError.badRequest('유효한 messageId가 필요합니다.');
+    }
+    const sent = await sendMany({
+      senderId: req.user.id,
+      messageId,
+      results: req.body.results,
+    });
+    res.json({
+      messageId: sent.message.id,
+      status: sent.message.status,
+      sentCount: sent.sentCount,
+      failedCount: sent.failedCount,
+      results: sent.outcomes.map(({ result, gmailMessageId, errorMessage }) => ({
+        id: result.id,
+        recipientId: result.recipientId,
+        recipientEmail: result.recipientEmail,
+        subject: result.finalSubject,
+        body: result.finalBody,
+        status: result.status,
+        sentAt: result.sentAt,
+        gmailMessageId,
+        error: errorMessage,
+      })),
+    });
+  };
+}
+
+exports.createSendHandler = createSendHandler;
+exports.send = createSendHandler();
 
 // 기존 단일 수신자 태그 기반 변환 API는 호환성을 위해 유지한다.
 exports.convert = async (req, res) => {

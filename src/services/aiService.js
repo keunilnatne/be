@@ -114,6 +114,56 @@ async function optimizeMessage(input) {
   };
 }
 
+function clampScore(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : fallback;
+}
+
+function buildQualityPrompt({ subject, body, purpose, recipientContext }) {
+  return `당신은 국경을 넘는 업무 메시지의 품질을 평가하는 AI입니다.
+
+[제목]
+${subject}
+
+[본문]
+${body}
+
+[메시지 목적]
+${purpose || '명시되지 않음'}
+
+[수신자 Context]
+${JSON.stringify(recipientContext || {}, null, 2)}
+
+[평가 기준]
+1. clarity: 핵심 내용과 요청이 명확한가
+2. tone: 수신자와 업무 관계에 적합한 어조인가
+3. culturalFit: 수신자의 언어와 문화적 맥락을 존중하는가
+4. actionability: 수신자가 다음 행동을 이해할 수 있는가
+5. 원문에 없는 사실을 새로 만들어내지 마세요.
+6. 점수는 모두 0~100의 정수로 작성하세요.
+7. 설명이나 마크다운 없이 아래 JSON 객체만 출력하세요.
+{"overallScore":0,"breakdown":{"clarity":0,"tone":0,"culturalFit":0,"actionability":0},"strengths":["장점"],"improvements":["개선점"],"summary":"한 줄 요약"}`;
+}
+
+async function analyzeQuality(input) {
+  const parsed = parseJsonResponse(await callGemini(buildQualityPrompt(input)));
+  const breakdown = parsed.breakdown || {};
+  const normalized = {
+    clarity: clampScore(breakdown.clarity),
+    tone: clampScore(breakdown.tone),
+    culturalFit: clampScore(breakdown.culturalFit),
+    actionability: clampScore(breakdown.actionability),
+  };
+  const calculated = Math.round(Object.values(normalized).reduce((sum, score) => sum + score, 0) / 4);
+  return {
+    overallScore: clampScore(parsed.overallScore, calculated),
+    breakdown: normalized,
+    strengths: (Array.isArray(parsed.strengths) ? parsed.strengths : []).map(String).slice(0, 5),
+    improvements: (Array.isArray(parsed.improvements) ? parsed.improvements : []).map(String).slice(0, 5),
+    summary: String(parsed.summary || '').trim(),
+  };
+}
+
 function buildLegacyPrompt({ originalText, purpose, tags }) {
   const guidelines = tags.length
     ? tags.map((tag) => `- [${tag.category}] ${tag.label}: ${tag.promptGuideline}`).join('\n')
@@ -163,7 +213,9 @@ async function inferTags({ sampleText, taxonomy }) {
 }
 
 module.exports = {
+  analyzeQuality,
   buildOptimizationPrompt,
+  buildQualityPrompt,
   callGemini,
   convertMessage,
   inferTags,

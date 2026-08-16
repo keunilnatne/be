@@ -3,6 +3,7 @@ const tagService = require('../services/tagService');
 const aiService = require('../services/aiService');
 const messageOptimizationService = require('../services/messageOptimizationService');
 const messageSendService = require('../services/messageSendService');
+const messageQualityService = require('../services/messageQualityService');
 const ApiError = require('../utils/ApiError');
 
 const MAX_RECIPIENTS = 20;
@@ -147,3 +148,37 @@ exports.getOne = async (req, res) => {
 exports.saveRevision = async (req, res) => {
   res.status(501).json({ message: 'TODO: 사용자 최종 수정본 저장 구현 필요 (FS-008)' });
 };
+
+function createAnalyzeQualityHandler(analyze = messageQualityService.analyze) {
+  return async (req, res) => {
+    const messageId = Number(req.params.messageId);
+    if (!Number.isInteger(messageId) || messageId <= 0) {
+      throw ApiError.badRequest('유효한 messageId가 필요합니다.');
+    }
+    const outcomes = await analyze({
+      userId: req.user.id,
+      messageId,
+      resultIds: req.body.resultIds,
+    });
+    const successCount = outcomes.filter((outcome) => outcome.analysis).length;
+    res.json({
+      messageId,
+      successCount,
+      failedCount: outcomes.length - successCount,
+      results: outcomes.map(({ result, analysis, error }) => ({
+        id: result.id,
+        recipientId: result.recipientId,
+        recipientName: result.recipientName,
+        qualityScore: analysis?.overallScore ?? null,
+        breakdown: analysis?.breakdown ?? null,
+        strengths: analysis?.strengths ?? [],
+        improvements: analysis?.improvements ?? [],
+        summary: analysis?.summary ?? null,
+        error,
+      })),
+    });
+  };
+}
+
+exports.createAnalyzeQualityHandler = createAnalyzeQualityHandler;
+exports.analyzeQuality = createAnalyzeQualityHandler();

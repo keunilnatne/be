@@ -1,15 +1,37 @@
 const { DataTypes, Model } = require('sequelize');
 const sequelize = require('../config/database');
 
-// FS-004~006: 메시지 초안/변환 결과
-// TODO: purpose, channel, formalityLevel, originalText, convertedText, status 등 상세 필드 정의
 class Message extends Model {}
 
 Message.init(
   {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     senderId: { type: DataTypes.INTEGER, allowNull: false },
-    recipientId: { type: DataTypes.INTEGER },
+
+    // 기존 단일 수신자 변환 API와의 호환을 위해 유지한다.
+    recipientId: { type: DataTypes.INTEGER, allowNull: true },
+
+    originalSubject: { type: DataTypes.TEXT, allowNull: false, defaultValue: '' },
+    originalBody: { type: DataTypes.TEXT('long'), allowNull: false },
+    purpose: { type: DataTypes.STRING, allowNull: true },
+    channel: { type: DataTypes.STRING, allowNull: false, defaultValue: 'email' },
+    status: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'draft',
+      validate: {
+        isIn: [[
+          'draft',
+          'optimizing',
+          'optimized',
+          'partially_failed',
+          'failed',
+          'partially_sent',
+          'sent',
+        ]],
+      },
+    },
+    optimizedAt: { type: DataTypes.DATE, allowNull: true },
   },
   { sequelize, modelName: 'Message', tableName: 'messages' }
 );

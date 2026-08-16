@@ -8,6 +8,8 @@ const messageRoutes = require('./message.routes');
 const tagRoutes = require('./tag.routes');
 const teamMemoryRoutes = require('./teamMemory.routes');
 const gmailIntegrationRoutes = require('./gmailIntegration.routes');
+const historyRoutes = require('./history.routes');
+const dashboardRoutes = require('./dashboard.routes');
 
 const router = Router();
 
@@ -28,5 +30,7 @@ router.use('/messages', messageRoutes);
 router.use('/tags', tagRoutes);
 router.use('/team-memory', teamMemoryRoutes);
 router.use('/integrations/gmail', gmailIntegrationRoutes);
+router.use('/history', historyRoutes);
+router.use('/dashboard', dashboardRoutes);
 
 module.exports = router;

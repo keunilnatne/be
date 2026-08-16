@@ -9,7 +9,7 @@ const tagRoutes = require('./tag.routes');
 
 const router = Router();
 
-// FS-001: 사용자/조직 프로필
+// FS-001: 사용자 인증 및 조직 프로필
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 
@@ -19,10 +19,10 @@ router.use('/companies', companyRoutes);
 // FS-003: 수신자 협업 프로필
 router.use('/recipients', recipientRoutes);
 
-// FS-004~007: 메시지 생성/분석/변환
+// FS-004~007: 메시지 생성, 분석 및 변환
 router.use('/messages', messageRoutes);
 
-// 태그 마스터 (직무/문체/조직 특성 등)
+// 직무, 문체, 조직 특성 태그 마스터
 router.use('/tags', tagRoutes);
 
 module.exports = router;

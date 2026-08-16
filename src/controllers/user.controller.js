@@ -1,19 +1,45 @@
 const { User, Company } = require('../models');
 const tagService = require('../services/tagService');
 const ApiError = require('../utils/ApiError');
+const serializeUser = require('../utils/serializeUser');
 
-// FS-001: 사용자 및 조직 프로필 설정 (MVP: 로그인 없이 CRUD, 태그로 기본 문체 표현)
-async function serializeUser(user) {
-  const tags = await tagService.getTagsForEntity('user', user.id);
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    jobRole: user.jobRole,
-    team: user.team,
-    company: user.Company ? { id: user.Company.id, name: user.Company.name } : null,
-    tags: tags.map((t) => ({ id: t.id, category: t.category, name: t.name, label: t.label })),
-  };
+const PROFILE_FIELDS = [
+  'name',
+  'jobRole',
+  'position',
+  'team',
+  'defaultLanguage',
+  'tools',
+  'communicationPreferences',
+  'customStyle',
+  'companyId',
+];
+
+function pickProfileFields(body) {
+  return PROFILE_FIELDS.reduce((values, field) => {
+    if (body[field] !== undefined) values[field] = body[field];
+    return values;
+  }, {});
+}
+
+async function validateProfileUpdates(updates) {
+  if (updates.name !== undefined && !String(updates.name).trim()) {
+    throw ApiError.badRequest('name은 빈 값일 수 없습니다.');
+  }
+  if (updates.tools !== undefined && !Array.isArray(updates.tools)) {
+    throw ApiError.badRequest('tools는 배열이어야 합니다.');
+  }
+  if (
+    updates.communicationPreferences !== undefined
+    && !Array.isArray(updates.communicationPreferences)
+  ) {
+    throw ApiError.badRequest('communicationPreferences는 배열이어야 합니다.');
+  }
+  if (updates.companyId !== undefined && updates.companyId !== null) {
+    const company = await Company.findByPk(updates.companyId);
+    if (!company) throw ApiError.badRequest('존재하지 않는 회사입니다.');
+  }
+  if (updates.name !== undefined) updates.name = String(updates.name).trim();
 }
 
 exports.list = async (req, res) => {
@@ -61,5 +87,23 @@ exports.update = async (req, res) => {
   }
 
   const updated = await User.findByPk(user.id, { include: [Company] });
+  res.json(await serializeUser(updated));
+};
+
+exports.getMe = async (req, res) => {
+  const user = await User.findByPk(req.user.id, { include: [Company] });
+  res.json(await serializeUser(user));
+};
+
+exports.updateMe = async (req, res) => {
+  const updates = pickProfileFields(req.body);
+  await validateProfileUpdates(updates);
+  await req.user.update(updates);
+
+  if (Array.isArray(req.body.tagIds)) {
+    await tagService.setTagsForEntity('user', req.user.id, req.body.tagIds);
+  }
+
+  const updated = await User.findByPk(req.user.id, { include: [Company] });
   res.json(await serializeUser(updated));
 };

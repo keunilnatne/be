@@ -10,5 +10,7 @@ router.post('/login', authController.login);
 router.put('/password', authMiddleware, authController.changePassword);
 router.get('/google', authController.googleAuthUrl);
 router.get('/google/callback', authController.googleCallback);
+router.get('/google/success', authController.googleSuccess);
 
 module.exports = router;
+

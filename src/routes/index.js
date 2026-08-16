@@ -16,6 +16,7 @@ router.use('/users', userRoutes);
 
 // FS-002: Company DNA
 router.use('/companies', companyRoutes);
+router.use('/company-dna', companyRoutes);
 
 // FS-003: 수신자 협업 프로필
 router.use('/recipients', recipientRoutes);

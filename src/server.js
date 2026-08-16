@@ -9,7 +9,7 @@ async function start() {
     console.log('[DB] MySQL 연결 성공');
 
     // 개발 초기 단계 편의용. 운영에서는 마이그레이션으로 대체 예정.
-    await sequelize.sync();
+    await sequelize.sync({ alter: true });
     console.log('[DB] 스키마 동기화 완료');
 
     app.listen(env.port, () => {

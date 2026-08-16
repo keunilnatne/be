@@ -10,11 +10,19 @@ User.init(
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     name: { type: DataTypes.STRING, allowNull: false },
     email: { type: DataTypes.STRING, allowNull: false, unique: true },
+    password: { type: DataTypes.STRING, allowNull: true },
     jobRole: { type: DataTypes.STRING },
+    jobTitle: { type: DataTypes.STRING },
     team: { type: DataTypes.STRING },
     companyId: { type: DataTypes.INTEGER, allowNull: true },
-    // IANA 타임존 문자열 (예: 'Asia/Seoul'). 수신자와 시간대가 다를 때 시간 변환에 사용.
+    companyName: { type: DataTypes.STRING },
+    tools: { type: DataTypes.JSON },
+    preferredStyle: { type: DataTypes.STRING },
+    customStyle: { type: DataTypes.TEXT },
+    defaultLanguage: { type: DataTypes.STRING, defaultValue: 'Korean' },
     timezone: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Asia/Seoul' },
+    googleConnected: { type: DataTypes.BOOLEAN, defaultValue: false },
+    googleEmail: { type: DataTypes.STRING },
   },
   { sequelize, modelName: 'User', tableName: 'users' }
 );

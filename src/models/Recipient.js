@@ -12,8 +12,22 @@ Recipient.init(
     name: { type: DataTypes.STRING, allowNull: false },
     email: { type: DataTypes.STRING },
     jobRole: { type: DataTypes.STRING },
-    // IANA 타임존 문자열 (예: 'America/New_York'). 발신자와 다르면 시간 변환에 사용.
+    company: { type: DataTypes.STRING },
+    country: { type: DataTypes.STRING, defaultValue: 'South Korea' },
+    language: { type: DataTypes.STRING, defaultValue: 'Korean' },
     timezone: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Asia/Seoul' },
+    relationship: { type: DataTypes.STRING, defaultValue: 'External Partner' },
+    responseSpeed: { type: DataTypes.STRING, defaultValue: '보통' },
+    averageResponseMinutes: { type: DataTypes.INTEGER, defaultValue: 30 },
+    collaborationActivity: { type: DataTypes.STRING, defaultValue: 'Medium' },
+    isOnline: { type: DataTypes.BOOLEAN, defaultValue: false },
+    isFavorite: { type: DataTypes.BOOLEAN, defaultValue: false },
+    isRecent: { type: DataTypes.BOOLEAN, defaultValue: true },
+    verifiedExpert: { type: DataTypes.BOOLEAN, defaultValue: false },
+    fullTime: { type: DataTypes.BOOLEAN, defaultValue: true },
+    avatar: { type: DataTypes.STRING },
+    memo: { type: DataTypes.TEXT },
+    communicationStyle: { type: DataTypes.JSON },
   },
   { sequelize, modelName: 'Recipient', tableName: 'recipients' }
 );

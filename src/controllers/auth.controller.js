@@ -115,25 +115,32 @@ exports.login = async (req, res) => {
 // PUT /api/auth/password - 비밀번호 변경
 exports.changePassword = async (req, res) => {
   const { oldPassword, newPassword } = req.body;
-  if (!oldPassword || !newPassword) {
-    throw ApiError.badRequest('기존 비밀번호와 새 비밀번호를 입력해 주세요.');
+  if (!newPassword) {
+    throw ApiError.badRequest('새 비밀번호를 입력해 주세요.');
+  }
+
+  if (newPassword.length < 8) {
+    throw ApiError.badRequest('새 비밀번호는 8자 이상이어야 합니다.');
   }
 
   const user = req.user;
-  if (!user.password) {
-    throw ApiError.badRequest('구글 계정은 비밀번호를 변경할 수 없습니다.');
+  const currentPassword = user.password || user.passwordHash;
+
+  if (oldPassword && currentPassword) {
+    const isMatch = await bcrypt.compare(oldPassword, currentPassword);
+    if (!isMatch) {
+      throw ApiError.badRequest('기존 비밀번호가 일치하지 않습니다.');
+    }
   }
 
-  const isMatch = await bcrypt.compare(oldPassword, user.password);
-  if (!isMatch) {
-    throw ApiError.badRequest('기존 비밀번호가 일치하지 않습니다.');
-  }
-
-  user.password = await bcrypt.hash(newPassword, 10);
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  user.password = hashedPassword;
+  user.passwordHash = hashedPassword;
   await user.save();
 
   res.json({ message: '비밀번호가 성공적으로 변경되었습니다.' });
 };
+
 
 // GET /api/auth/google
 exports.googleAuthUrl = async (req, res) => {

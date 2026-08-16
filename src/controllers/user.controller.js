@@ -183,8 +183,13 @@ exports.resetPersonalization = async (req, res) => {
 // DELETE /api/users/me
 exports.deleteMe = async (req, res) => {
   const user = req.user;
-  await UserSetting.destroy({ where: { userId: user.id } });
+  try {
+    await UserSetting.destroy({ where: { userId: user.id } });
+  } catch (e) {
+    // ignore
+  }
   await user.destroy();
-  res.json({ message: '계정이 삭제되었습니다.' });
+  res.json({ message: '계정이 성공적으로 삭제되었습니다.' });
 };
+
 

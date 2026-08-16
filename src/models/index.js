@@ -10,6 +10,7 @@ const Message = require('./Message');
 const MessageResult = require('./MessageResult');
 const MessageAnalysis = require('./MessageAnalysis');
 const UserSetting = require('./UserSetting');
+const TeamMemory = require('./TeamMemory');
 
 Tag.hasMany(EntityTag, { foreignKey: 'tagId' });
 EntityTag.belongsTo(Tag, { foreignKey: 'tagId' });
@@ -35,4 +36,5 @@ module.exports = {
   MessageResult,
   MessageAnalysis,
   UserSetting,
+  TeamMemory,
 };

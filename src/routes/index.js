@@ -7,6 +7,9 @@ const recipientRoutes = require('./recipient.routes');
 const messageRoutes = require('./message.routes');
 const tagRoutes = require('./tag.routes');
 const gmailRoutes = require('./gmail.routes');
+const teamMemoryRoutes = require('./teamMemory.routes');
+const historyRoutes = require('./history.routes');
+const dashboardRoutes = require('./dashboard.routes');
 
 const router = Router();
 
@@ -29,5 +32,12 @@ router.use('/tags', tagRoutes);
 
 // FS-009: Gmail 연동 (받은 편지함 조회, 발송)
 router.use('/gmail', gmailRoutes);
+
+// FS-010: 팀 메모리 (패턴 템플릿 및 학습 로그)
+router.use('/team-memory', teamMemoryRoutes);
+
+// FS-008: 히스토리 & 대시보드 통계 API
+router.use('/history', historyRoutes);
+router.use('/dashboard', dashboardRoutes);
 
 module.exports = router;

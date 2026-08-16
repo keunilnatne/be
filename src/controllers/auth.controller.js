@@ -65,7 +65,11 @@ exports.signup = async (req, res) => {
     companyName: companyName || '',
   });
 
-  await UserSetting.findOrCreate({ where: { userId: user.id } });
+  try {
+    await UserSetting.findOrCreate({ where: { userId: user.id } });
+  } catch (e) {
+    // ignore
+  }
 
   const token = generateToken(user);
   res.status(201).json({
@@ -102,10 +106,10 @@ exports.login = async (req, res) => {
   const token = generateToken(user);
   res.json({
     token,
-  }
-
-  res.json(await authResponse(user));
->>>>>>> origin/dev/hong
+    accessToken: token,
+    tokenType: 'Bearer',
+    user: serializeAuthUser(user),
+  });
 };
 
 // PUT /api/auth/password - 비밀번호 변경

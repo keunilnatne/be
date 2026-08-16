@@ -357,4 +357,4 @@ exports.rejectCandidate = async (req, res) => {
 };
 
 exports.reject = exports.rejectCandidate;
-
+exports.serialize = (memory) => (memory.type === 'candidate' ? serializeCandidate(memory) : memory.type === 'log' ? serializeLog(memory) : serializePattern(memory));

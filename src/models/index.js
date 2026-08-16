@@ -7,6 +7,7 @@ const Recipient = require('./Recipient');
 const Tag = require('./Tag');
 const EntityTag = require('./EntityTag');
 const Message = require('./Message');
+const MessageResult = require('./MessageResult');
 const MessageAnalysis = require('./MessageAnalysis');
 const UserSetting = require('./UserSetting');
 
@@ -19,6 +20,9 @@ User.belongsTo(Company, { foreignKey: 'companyId' });
 User.hasOne(UserSetting, { foreignKey: 'userId', as: 'setting' });
 UserSetting.belongsTo(User, { foreignKey: 'userId' });
 
+Message.hasMany(MessageResult, { foreignKey: 'messageId', as: 'results' });
+MessageResult.belongsTo(Message, { foreignKey: 'messageId' });
+
 module.exports = {
   sequelize,
   User,
@@ -28,6 +32,7 @@ module.exports = {
   Tag,
   EntityTag,
   Message,
+  MessageResult,
   MessageAnalysis,
   UserSetting,
 };

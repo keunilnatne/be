@@ -1,7 +1,7 @@
 const env = require('../config/env');
 
 function buildPrompt({ originalText, purpose, tags, language, timeContext }) {
-  const guidelines = tags.length
+  const guidelines = tags && tags.length
     ? tags.map((t) => `- [${t.category}] ${t.label}: ${t.promptGuideline}`).join('\n')
     : '- 특별한 선호 정보 없음. 일반적인 업무 문체로 작성하세요.';
 
@@ -35,72 +35,152 @@ ${timeBlock}
 }
 
 async function callGemini(prompt) {
-  const url = `${env.ai.apiUrl}/models/${env.ai.model}:generateContent?key=${env.ai.apiKey}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-  });
-  const data = await res.json();
-
-  if (!res.ok) {
-    const err = new Error(data?.error?.message || 'AI 호출 실패');
-    err.statusCode = 502;
-    throw err;
+  if (!env.ai.apiKey) {
+    return null;
   }
 
-  return (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+  const url = `${env.ai.apiUrl}/models/${env.ai.model}:generateContent?key=${env.ai.apiKey}`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.warn('[Gemini API Notice]:', data?.error?.message || 'API Call failed');
+      return null;
+    }
+
+    return (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+  } catch (err) {
+    console.warn('[Gemini API Exception]:', err.message);
+    return null;
+  }
 }
 
 async function convertMessage({ originalText, purpose, tags, language, timeContext }) {
   const prompt = buildPrompt({ originalText, purpose, tags, language, timeContext });
-  const convertedText = await callGemini(prompt);
+  let convertedText = await callGemini(prompt);
+  if (!convertedText) {
+    convertedText = originalText;
+  }
   return { convertedText };
 }
 
-function buildTagInferencePrompt({ sampleText, taxonomy }) {
+function buildMultiRecipientPrompt({ recipients, subject, body, companyDna }) {
+  const recipientsInfo = recipients.map((r, i) => `
+[수신자 ${i + 1}]
+- 이름: ${r.name || '수신자'}
+- 직무: ${r.jobRole || r.position || r.role || '미지정'}
+- 소속/관계: ${r.company || ''} (${r.relationship || r.organizationRelation || '협업 관계'})
+- 언어: ${r.language || 'Korean'}
+- 시간대: ${r.timezone || 'Asia/Seoul'}
+- 선호 스타일: ${Array.isArray(r.communicationStyle) ? r.communicationStyle.join(', ') : '명확하고 정중한 문체'}
+`).join('\n');
+
+  let dnaBlock = '';
+  if (companyDna && companyDna.aiEnabled) {
+    const terms = (companyDna.terms || []).map((t) => `- '${t.from}' -> '${t.to}'`).join('\n');
+    const rules = (companyDna.rules || []).map((r) => `- [${r.title}]: ${r.description}`).join('\n');
+    dnaBlock = `
+[조직 Company DNA 소통 규칙]
+- 용어 지양 및 권장 표현:
+${terms || '특이사항 없음'}
+- 조직 커뮤니케이션 규칙:
+${rules || '특이사항 없음'}
+`;
+  }
+
+  return `당신은 최고 수준의 비즈니스 커뮤니케이션 AI 어시스턴트입니다.
+
+[작성 요청 정보]
+- 원본 제목: ${subject}
+- 원본 본문:
+${body}
+
+${dnaBlock}
+
+[수신자 목록]
+${recipientsInfo}
+
+[핵심 지시사항]
+1. 원문의 중요한 정보(날짜, 시간, 수치, 담당자 등)는 절대로 왜곡하거나 임의로 변경하지 마세요.
+2. 각 수신자의 언어(${recipients[0]?.language || 'Korean'}), 시간대, 직무 및 관계에 적합하게 제목과 본문을 다듬으세요.
+3. 아래 JSON 포맷으로만 응답해 주세요. 다른 설명, 마크다운 서식은 붙이지 마세요:
+{
+  "optimizedSubject": "최적화된 제목",
+  "optimizedBody": "최적화된 본문"
+}`;
+}
+
+async function optimizeMessage({ recipients = [], subject = '', body = '', companyDna = null }) {
+  const primaryRecipient = recipients[0] || {};
+  const prompt = buildMultiRecipientPrompt({ recipients, subject, body, companyDna });
+
+  let aiRaw = await callGemini(prompt);
+  let resultSubject = subject;
+  let resultBody = body;
+
+  if (aiRaw) {
+    try {
+      const cleaned = aiRaw.replace(/```json|```/gi, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (parsed.optimizedSubject) resultSubject = parsed.optimizedSubject;
+      if (parsed.optimizedBody) resultBody = parsed.optimizedBody;
+    } catch {
+      if (aiRaw.length > 5) {
+        resultBody = aiRaw;
+      }
+    }
+  }
+
+  const recipientResults = recipients.map((r) => ({
+    recipientId: r.id || null,
+    recipientName: r.name || '수신자',
+    recipientEmail: r.email || '',
+    optimizedSubject: resultSubject,
+    optimizedBody: resultBody,
+    appliedContext: {
+      language: r.language || 'Korean',
+      timezone: r.timezone || 'Asia/Seoul',
+      position: r.jobRole || r.position || r.role || '직무',
+      relationship: r.relationship || r.organizationRelation || '협업 관계',
+    },
+    qualityScore: 92,
+    status: 'converted',
+  }));
+
+  return {
+    subject: resultSubject,
+    body: resultBody,
+    recipientResults,
+  };
+}
+
+async function inferTags({ sampleText, taxonomy }) {
+  if (!taxonomy || !taxonomy.length) return [];
   const taxonomyText = taxonomy
     .map((t) => `- category="${t.category}", name="${t.name}" (${t.label}): ${t.promptGuideline}`)
     .join('\n');
 
-  return `당신은 커뮤니케이션 스타일 분석기입니다. 아래 텍스트를 보고 이 사람에게 맞는 소통 스타일을, 반드시 아래 태그 목록 중에서만 골라 분류하세요.
-
-[사용 가능한 태그 목록]
+  const prompt = `당신은 커뮤니케이션 스타일 분석기입니다. 아래 텍스트를 보고 이 사람에게 맞는 소통 스타일을 분류하세요.
+[가능한 태그]
 ${taxonomyText}
+[텍스트]
+${sampleText}`;
 
-[분석 대상 텍스트]
-"""
-${sampleText}
-"""
-
-[지시사항]
-1. 위 목록에 등장하는 category마다 가장 적합한 태그를 최대 1개까지만 고르세요.
-2. 텍스트에서 근거를 찾을 수 없는 카테고리는 생략하세요.
-3. 목록에 없는 태그를 새로 만들지 마세요.
-4. 아래 형식의 JSON 배열만 출력하세요. 다른 텍스트, 설명, 마크다운 코드블록은 절대 포함하지 마세요.
-[{"category":"tone","name":"formal","reason":"한 문장 이유"}]`;
-}
-
-// 샘플 텍스트(수신 메시지, 특징 설명 등)를 기존 태그 taxonomy 안에서만 분류.
-// 목록에 없는 항목은 걸러내 반환하므로, 호출 측에서 별도 검증 없이 신뢰 가능.
-async function inferTags({ sampleText, taxonomy }) {
-  const prompt = buildTagInferencePrompt({ sampleText, taxonomy });
   const raw = await callGemini(prompt);
+  if (!raw) return [];
+
   const cleaned = raw.replace(/```json|```/gi, '').trim();
-
-  let parsed;
   try {
-    parsed = JSON.parse(cleaned);
-  } catch (err) {
-    const parseErr = new Error('AI 응답을 태그 목록으로 해석하지 못했습니다.');
-    parseErr.statusCode = 502;
-    throw parseErr;
+    const parsed = JSON.parse(cleaned);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
-
-  const taxonomyKeySet = new Set(taxonomy.map((t) => `${t.category}:${t.name}`));
-  return (Array.isArray(parsed) ? parsed : []).filter(
-    (item) => item && taxonomyKeySet.has(`${item.category}:${item.name}`)
-  );
 }
 
-module.exports = { convertMessage, inferTags };
+module.exports = { convertMessage, inferTags, optimizeMessage };

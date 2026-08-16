@@ -1,5 +1,6 @@
 const { TeamMemory } = require('../models');
 const ApiError = require('../utils/ApiError');
+const teamMemoryService = require('../services/teamMemoryService');
 
 const initialPatterns = [
   {
@@ -190,6 +191,27 @@ exports.listPatterns = async (req, res) => {
   res.json(patterns.map(serializePattern));
 };
 
+// GET /api/team-memory/candidates
+exports.listCandidates = async (req, res) => {
+  await ensureSeedTeamMemory();
+  const candidates = await TeamMemory.findAll({
+    where: { type: 'candidate', status: 'pending' },
+    order: [['id', 'ASC']],
+  });
+  res.json(candidates.map(serializeCandidate));
+};
+
+// GET /api/team-memory/logs
+exports.listLogs = async (req, res) => {
+  await ensureSeedTeamMemory();
+  const logs = await TeamMemory.findAll({
+    where: { type: 'log' },
+    order: [['id', 'DESC']],
+    limit: 20,
+  });
+  res.json(logs.map(serializeLog));
+};
+
 // POST /api/team-memory/patterns
 exports.createPattern = async (req, res) => {
   const { title, purpose, reason, request, deadline, attachmentName } = req.body;
@@ -221,6 +243,8 @@ exports.createPattern = async (req, res) => {
   res.status(201).json(serializePattern(pattern));
 };
 
+exports.create = exports.createPattern;
+
 // PUT /api/team-memory/patterns/:id
 exports.updatePattern = async (req, res) => {
   const pattern = await TeamMemory.findByPk(req.params.id);
@@ -251,6 +275,8 @@ exports.updatePattern = async (req, res) => {
   res.json(serializePattern(pattern));
 };
 
+exports.update = exports.updatePattern;
+
 // DELETE /api/team-memory/patterns/:id
 exports.deletePattern = async (req, res) => {
   const pattern = await TeamMemory.findByPk(req.params.id);
@@ -272,6 +298,8 @@ exports.deletePattern = async (req, res) => {
   res.json({ message: '패턴이 성공적으로 삭제되었습니다.' });
 };
 
+exports.remove = exports.deletePattern;
+
 // POST /api/team-memory/candidates/:id/approve - AI 추천 후보 승인
 exports.approveCandidate = async (req, res) => {
   const candidate = await TeamMemory.findByPk(req.params.id);
@@ -285,9 +313,9 @@ exports.approveCandidate = async (req, res) => {
   const newPattern = await TeamMemory.create({
     team: 'default',
     type: 'pattern',
-    title: `AI 학습 패턴: ${candidate.suggestion.slice(0, 15)}`,
-    purpose: candidate.suggestion,
-    reason: candidate.text,
+    title: `AI 학습 패턴: ${(candidate.suggestion || candidate.title || '신규 패턴').slice(0, 15)}`,
+    purpose: candidate.suggestion || candidate.purpose || '',
+    reason: candidate.text || candidate.reason || '',
     unread: true,
     status: 'approved',
   });
@@ -296,7 +324,7 @@ exports.approveCandidate = async (req, res) => {
     team: 'default',
     type: 'log',
     action: '패턴 학습 완료',
-    description: `AI 추천 패턴 '${candidate.suggestion}'이(가) 승인되어 팀 메모리에 학습되었습니다.`,
+    description: `AI 추천 패턴이 승인되어 팀 메모리에 학습되었습니다.`,
     status: 'approved',
   });
 
@@ -305,6 +333,8 @@ exports.approveCandidate = async (req, res) => {
     pattern: serializePattern(newPattern),
   });
 };
+
+exports.approve = exports.approveCandidate;
 
 // POST /api/team-memory/candidates/:id/reject - AI 추천 후보 거절
 exports.rejectCandidate = async (req, res) => {
@@ -319,9 +349,12 @@ exports.rejectCandidate = async (req, res) => {
     team: 'default',
     type: 'log',
     action: '패턴 거절',
-    description: `AI 추천 패턴 '${candidate.suggestion}'이(가) 거절되었습니다.`,
+    description: `AI 추천 패턴이 거절되었습니다.`,
     status: 'approved',
   });
 
   res.json({ message: 'AI 추천 패턴이 거절되었습니다.' });
 };
+
+exports.reject = exports.rejectCandidate;
+

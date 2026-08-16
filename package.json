@@ -11,6 +11,11 @@
   "scripts": {
     "dev": "nodemon -e js,json,env src/server.js",
     "start": "node src/server.js",
+    "test": "node --test --test-isolation=none",
+    "test:db:messages": "node src/scripts/verifyMessageModels.js",
+    "test:integration:optimize": "node src/scripts/verifyMessageOptimization.js",
+    "test:db:team-memory": "node src/scripts/verifyTeamMemory.js",
+    "test:db:gmail": "node src/scripts/verifyGmailIntegration.js",
     "db:seed": "node src/scripts/seedDemo.js"
   },
   "dependencies": {

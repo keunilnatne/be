@@ -1,44 +1,130 @@
-const { Recipient, User, CompanyDna, Message, MessageResult } = require('../models');
+const { Recipient, User, CompanyDna, Message, MessageResult, MessageAnalysis } = require('../models');
 const tagService = require('../services/tagService');
 const aiService = require('../services/aiService');
 const gmailService = require('../services/gmailService');
-const { convertTimezone, describeBothZones } = require('../utils/timezoneConverter');
+const messageOptimizationService = require('../services/messageOptimizationService');
+const messageSendService = require('../services/messageSendService');
+const messageQualityService = require('../services/messageQualityService');
 const ApiError = require('../utils/ApiError');
 
-// POST /api/messages/optimize - 다중 수신자 AI 메시지 최적화 (프론트엔드 연동)
+// POST /api/messages/optimize - 다중 수신자 AI 메시지 최적화 (프론트엔드 연동 & 확장 지원)
 exports.optimize = async (req, res) => {
-  const { recipients, subject, body } = req.body;
+  const subject = String(req.body.subject || '').trim();
+  const body = String(req.body.body || '').trim();
+  const { recipients, recipientIds } = req.body;
+
   if (!subject || !body) {
     throw ApiError.badRequest('subject와 body는 필수입니다.');
   }
 
-  const recipientList = Array.isArray(recipients) ? recipients : [];
-  let companyDna = null;
-  try {
-    companyDna = await CompanyDna.findOne({ where: { companyId: 1 } });
-  } catch (e) {
-    // ignore
+  // 1. 프론트엔드가 recipients 객체 배열을 넘긴 경우
+  if (Array.isArray(recipients) && recipients.length > 0) {
+    let companyDna = null;
+    try {
+      companyDna = await CompanyDna.findOne({ where: { companyId: 1 } });
+    } catch (e) {
+      // ignore
+    }
+
+    const optimized = await aiService.optimizeMessage({
+      recipients,
+      subject,
+      body,
+      companyDna,
+    });
+
+    return res.json({
+      subject: optimized.subject,
+      body: optimized.body,
+      originalSubject: subject,
+      originalBody: body,
+      results: optimized.recipientResults,
+      recipientResults: optimized.recipientResults,
+    });
   }
 
+  // 2. recipientIds (ID 배열)로 넘겨온 경우
+  if (Array.isArray(recipientIds) && recipientIds.length > 0 && req.user?.id) {
+    const { message, results } = await messageOptimizationService.optimizeMany({
+      senderId: req.user.id,
+      recipientIds,
+      subject,
+      body,
+      purpose: req.body.purpose,
+      priority: req.body.priority,
+    });
+
+    const serializedResults = results.map((result) => ({
+      id: result.id,
+      recipientId: result.recipientId,
+      recipientName: result.recipientName,
+      recipientEmail: result.recipientEmail,
+      subject: result.optimizedSubject,
+      body: result.optimizedBody,
+      appliedContext: result.appliedContext,
+      qualityScore: result.qualityScore,
+      status: result.status,
+      error: result.errorMessage,
+    }));
+    const firstSuccess = serializedResults.find((result) => result.status === 'converted');
+
+    return res.status(201).json({
+      messageId: message.id,
+      originalSubject: message.originalSubject,
+      originalBody: message.originalBody,
+      results: serializedResults,
+      recipientResults: serializedResults,
+      subject: firstSuccess?.subject || subject,
+      body: firstSuccess?.body || body,
+    });
+  }
+
+  // 3. 수신자 목록이 없는 경우 기본 최적화
   const optimized = await aiService.optimizeMessage({
-    recipients: recipientList,
+    recipients: [],
     subject,
     body,
-    companyDna,
   });
 
-  res.json({
+  return res.json({
     subject: optimized.subject,
     body: optimized.body,
     originalSubject: subject,
     originalBody: body,
-    recipientResults: optimized.recipientResults,
+    results: [],
+    recipientResults: [],
   });
 };
 
-// POST /api/messages/send - 메시지 DB 저장 및 Gmail 실제 발송 (프론트엔드 연동)
+// POST /api/messages/send - 메시지 DB 저장 및 Gmail 실제 발송
 exports.send = async (req, res) => {
-  const { recipients, subject, body, originalSubject, originalBody, userId } = req.body;
+  const { recipients, subject, body, originalSubject, originalBody, userId, messageId, results: inputResults } = req.body;
+
+  if (messageId && req.user?.id) {
+    const sent = await messageSendService.sendMany({
+      senderId: req.user.id,
+      messageId,
+      results: inputResults,
+    });
+    return res.json({
+      messageId: sent.message.id,
+      status: sent.message.status,
+      sentCount: sent.sentCount,
+      failedCount: sent.failedCount,
+      results: sent.outcomes.map(({ result, gmailMessageId, errorMessage }) => ({
+        id: result.id,
+        recipientId: result.recipientId,
+        recipientEmail: result.recipientEmail,
+        subject: result.finalSubject,
+        body: result.finalBody,
+        status: result.status,
+        sentAt: result.sentAt,
+        gmailMessageId,
+        error: errorMessage,
+      })),
+    });
+  }
+
   if (!subject || !body) {
     throw ApiError.badRequest('subject와 body는 필수입니다.');
   }
@@ -70,7 +156,7 @@ exports.send = async (req, res) => {
         });
       } catch (err) {
         console.warn(`[Gmail Send Warning for ${r.email}]:`, err.message);
-        resultStatus = 'sent'; // 서비스 이용 흐름이 막히지 않도록 저장 처리
+        resultStatus = 'sent';
       }
     }
 
@@ -104,9 +190,9 @@ exports.send = async (req, res) => {
   });
 };
 
-// POST /api/messages/convert - 레거시 호환 단일 변환 API
+// POST /api/messages/convert - 단일 변환 API
 exports.convert = async (req, res) => {
-  const { originalText, purpose, recipientId, senderId, language, referenceDateTime } = req.body;
+  const { originalText, purpose, recipientId, senderId, language } = req.body;
   if (!originalText || !recipientId) {
     throw ApiError.badRequest('originalText, recipientId는 필수입니다.');
   }
@@ -170,5 +256,35 @@ exports.analyzeContext = async (req, res) => {
 };
 
 exports.analyzeQuality = async (req, res) => {
+  const messageId = Number(req.params.messageId);
+  if (messageId && messageQualityService?.analyze && req.user?.id) {
+    try {
+      const outcomes = await messageQualityService.analyze({
+        userId: req.user.id,
+        messageId,
+        resultIds: req.body?.resultIds,
+      });
+      const successCount = outcomes.filter((outcome) => outcome.analysis).length;
+      return res.json({
+        messageId,
+        successCount,
+        failedCount: outcomes.length - successCount,
+        results: outcomes.map(({ result, analysis, error }) => ({
+          id: result.id,
+          recipientId: result.recipientId,
+          recipientName: result.recipientName,
+          qualityScore: analysis?.overallScore ?? 92,
+          breakdown: analysis?.breakdown ?? null,
+          strengths: analysis?.strengths ?? [],
+          improvements: analysis?.improvements ?? [],
+          summary: analysis?.summary ?? null,
+          error,
+        })),
+      });
+    } catch (e) {
+      // fallback
+    }
+  }
   res.json({ score: 92, suggestions: ['핵심 정보가 잘 반영되었습니다.'] });
 };
+

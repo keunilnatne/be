@@ -11,12 +11,17 @@ User.init(
     name: { type: DataTypes.STRING, allowNull: false },
     email: { type: DataTypes.STRING, allowNull: false, unique: true },
     password: { type: DataTypes.STRING, allowNull: true },
+    passwordHash: { type: DataTypes.STRING, allowNull: true },
+    authProvider: { type: DataTypes.STRING, allowNull: false, defaultValue: 'local' },
+    accountRole: { type: DataTypes.STRING, allowNull: false, defaultValue: 'user' },
     jobRole: { type: DataTypes.STRING },
     jobTitle: { type: DataTypes.STRING },
+    position: { type: DataTypes.STRING },
     team: { type: DataTypes.STRING },
     companyId: { type: DataTypes.INTEGER, allowNull: true },
     companyName: { type: DataTypes.STRING },
-    tools: { type: DataTypes.JSON },
+    tools: { type: DataTypes.JSON, defaultValue: ['Slack', 'Notion', 'Gmail'] },
+    communicationPreferences: { type: DataTypes.JSON, defaultValue: [] },
     preferredStyle: { type: DataTypes.STRING },
     customStyle: { type: DataTypes.TEXT },
     defaultLanguage: { type: DataTypes.STRING, defaultValue: 'Korean' },
@@ -28,3 +33,4 @@ User.init(
 );
 
 module.exports = User;
+

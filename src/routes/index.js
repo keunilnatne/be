@@ -7,13 +7,14 @@ const recipientRoutes = require('./recipient.routes');
 const messageRoutes = require('./message.routes');
 const tagRoutes = require('./tag.routes');
 const gmailRoutes = require('./gmail.routes');
+const gmailIntegrationRoutes = require('./gmailIntegration.routes');
 const teamMemoryRoutes = require('./teamMemory.routes');
 const historyRoutes = require('./history.routes');
 const dashboardRoutes = require('./dashboard.routes');
 
 const router = Router();
 
-// FS-001: 사용자/조직 프로필
+// FS-001: 사용자 인증 및 조직 프로필
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 
@@ -24,14 +25,15 @@ router.use('/company-dna', companyRoutes);
 // FS-003: 수신자 협업 프로필
 router.use('/recipients', recipientRoutes);
 
-// FS-004~007: 메시지 생성/분석/변환
+// FS-004~007: 메시지 생성, 분석 및 변환
 router.use('/messages', messageRoutes);
 
-// 태그 마스터 (직무/문체/조직 특성 등)
+// 직무, 문체, 조직 특성 태그 마스터
 router.use('/tags', tagRoutes);
 
-// FS-009: Gmail 연동 (받은 편지함 조회, 발송)
+// FS-009: Gmail 연동
 router.use('/gmail', gmailRoutes);
+router.use('/integrations/gmail', gmailIntegrationRoutes);
 
 // FS-010: 팀 메모리 (패턴 템플릿 및 학습 로그)
 router.use('/team-memory', teamMemoryRoutes);
@@ -41,3 +43,4 @@ router.use('/history', historyRoutes);
 router.use('/dashboard', dashboardRoutes);
 
 module.exports = router;
+

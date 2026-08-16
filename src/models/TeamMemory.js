@@ -7,24 +7,34 @@ class TeamMemory extends Model {}
 TeamMemory.init(
   {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-    team: { type: DataTypes.STRING, defaultValue: 'default' },
-    type: { type: DataTypes.STRING, allowNull: false }, // 'pattern' | 'candidate' | 'log'
-    title: { type: DataTypes.STRING },
-    purpose: { type: DataTypes.TEXT },
-    reason: { type: DataTypes.TEXT },
-    request: { type: DataTypes.TEXT },
-    deadline: { type: DataTypes.STRING },
-    attachmentName: { type: DataTypes.STRING },
-    text: { type: DataTypes.TEXT },
-    suggestion: { type: DataTypes.TEXT },
-    confidence: { type: DataTypes.INTEGER, defaultValue: 80 },
-    action: { type: DataTypes.STRING },
-    description: { type: DataTypes.TEXT },
+    team: { type: DataTypes.STRING, allowNull: true, defaultValue: 'default' },
+    type: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      validate: { isIn: [['pattern', 'candidate', 'log']] },
+    },
+    title: { type: DataTypes.STRING, allowNull: true },
+    purpose: { type: DataTypes.TEXT, allowNull: true },
+    reason: { type: DataTypes.TEXT, allowNull: true },
+    request: { type: DataTypes.TEXT, allowNull: true },
+    deadline: { type: DataTypes.STRING, allowNull: true },
+    attachmentName: { type: DataTypes.STRING, allowNull: true },
+    text: { type: DataTypes.TEXT, allowNull: true },
+    suggestion: { type: DataTypes.TEXT, allowNull: true },
+    confidence: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 80 },
+    action: { type: DataTypes.STRING, allowNull: true },
+    description: { type: DataTypes.TEXT, allowNull: true },
     unread: { type: DataTypes.BOOLEAN, defaultValue: false },
     isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
-    status: { type: DataTypes.STRING, defaultValue: 'approved' },
+    status: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: 'approved',
+      validate: { isIn: [['approved', 'pending', 'rejected']] },
+    },
   },
   { sequelize, modelName: 'TeamMemory', tableName: 'team_memories' }
 );
 
 module.exports = TeamMemory;
+

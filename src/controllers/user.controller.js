@@ -14,11 +14,13 @@ async function serializeUser(user) {
     name: user.name,
     email: user.email,
     jobRole: user.jobRole || '',
-    jobTitle: user.jobTitle || '',
+    jobTitle: user.jobTitle || user.position || '',
+    position: user.position || user.jobTitle || '',
     team: user.team || '',
     companyId: user.companyId || null,
     companyName: user.companyName || '',
     tools: user.tools || ['Slack', 'Notion', 'Gmail'],
+    communicationPreferences: user.communicationPreferences || [],
     preferredStyle: user.preferredStyle || '명확한 표현 선호',
     customStyle: user.customStyle || '',
     defaultLanguage: user.defaultLanguage || 'Korean',
@@ -75,12 +77,13 @@ exports.update = async (req, res) => {
   const user = await User.findByPk(req.params.userId);
   if (!user) throw ApiError.notFound('사용자를 찾을 수 없습니다.');
 
-  const { name, email, jobRole, jobTitle, team, companyId, companyName, tools, preferredStyle, customStyle, defaultLanguage, timezone, tagIds } = req.body;
+  const { name, email, jobRole, jobTitle, position, team, companyId, companyName, tools, preferredStyle, customStyle, defaultLanguage, timezone, tagIds } = req.body;
   await user.update({
     ...(name !== undefined && { name }),
     ...(email !== undefined && { email }),
     ...(jobRole !== undefined && { jobRole }),
     ...(jobTitle !== undefined && { jobTitle }),
+    ...(position !== undefined && { position }),
     ...(team !== undefined && { team }),
     ...(companyId !== undefined && { companyId }),
     ...(companyName !== undefined && { companyName }),
@@ -108,20 +111,27 @@ exports.getMe = async (req, res) => {
 // PUT /api/users/me
 exports.updateMe = async (req, res) => {
   const user = req.user;
-  const { name, jobRole, jobTitle, team, companyName, tools, preferredStyle, customStyle, defaultLanguage, timezone } = req.body;
+  const { name, jobRole, jobTitle, position, team, companyName, companyId, tools, communicationPreferences, preferredStyle, customStyle, defaultLanguage, timezone, tagIds } = req.body;
 
   await user.update({
     ...(name !== undefined && { name }),
     ...(jobRole !== undefined && { jobRole }),
     ...(jobTitle !== undefined && { jobTitle }),
+    ...(position !== undefined && { position }),
     ...(team !== undefined && { team }),
+    ...(companyId !== undefined && { companyId }),
     ...(companyName !== undefined && { companyName }),
     ...(tools !== undefined && { tools }),
+    ...(communicationPreferences !== undefined && { communicationPreferences }),
     ...(preferredStyle !== undefined && { preferredStyle }),
     ...(customStyle !== undefined && { customStyle }),
     ...(defaultLanguage !== undefined && { defaultLanguage }),
     ...(timezone !== undefined && { timezone }),
   });
+
+  if (Array.isArray(tagIds)) {
+    await tagService.setTagsForEntity('user', user.id, tagIds);
+  }
 
   const updated = await User.findByPk(user.id, { include: [Company] });
   res.json(await serializeUser(updated));
@@ -177,3 +187,4 @@ exports.deleteMe = async (req, res) => {
   await user.destroy();
   res.json({ message: '계정이 삭제되었습니다.' });
 };
+

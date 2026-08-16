@@ -7,6 +7,7 @@ const router = Router();
 // /me 라우트는 인증이 필요함
 router.get('/me', authMiddleware, userController.getMe);
 router.put('/me', authMiddleware, userController.updateMe);
+router.patch('/me', authMiddleware, userController.updateMe);
 router.delete('/me', authMiddleware, userController.deleteMe);
 router.get('/me/ai-settings', authMiddleware, userController.getAiSettings);
 router.put('/me/ai-settings', authMiddleware, userController.updateAiSettings);
@@ -18,3 +19,4 @@ router.get('/:userId', userController.getOne);
 router.put('/:userId', userController.update);
 
 module.exports = router;
+

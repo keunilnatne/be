@@ -1,18 +1,27 @@
 const { Router } = require('express');
 const messageController = require('../controllers/message.controller');
+const authenticate = require('../middlewares/auth');
 
 const router = Router();
 
-// 프론트엔드 연동 신규 표준 엔드포인트
-router.post('/optimize', messageController.optimize);
-router.post('/send', messageController.send);
+const optionalAuth = (req, res, next) => {
+  if (req.headers.authorization) {
+    return authenticate(req, res, next);
+  }
+  next();
+};
+
+// 다중 수신자 AI 최적화 및 발송
+router.post('/optimize', optionalAuth, messageController.optimize);
+router.post('/send', optionalAuth, messageController.send);
 
 // 초안 및 단일 변환 엔드포인트
-router.post('/', messageController.createDraft);
-router.post('/convert', messageController.convert);
-router.post('/:messageId/analyze-context', messageController.analyzeContext);
-router.post('/:messageId/analyze-quality', messageController.analyzeQuality);
-router.get('/:messageId', messageController.getOne);
-router.post('/:messageId/revisions', messageController.saveRevision);
+router.post('/', optionalAuth, messageController.createDraft);
+router.post('/convert', optionalAuth, messageController.convert);
+router.post('/:messageId/analyze-context', optionalAuth, messageController.analyzeContext);
+router.post('/:messageId/analyze-quality', optionalAuth, messageController.analyzeQuality);
+router.get('/:messageId', optionalAuth, messageController.getOne);
+router.post('/:messageId/revisions', optionalAuth, messageController.saveRevision);
 
 module.exports = router;
+

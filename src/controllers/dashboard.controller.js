@@ -1,6 +1,17 @@
 const { Message, MessageResult, Recipient } = require('../models');
+const dashboardService = require('../services/dashboardService');
 
 exports.getSummary = async (req, res) => {
+  const userId = req.user?.id;
+  if (userId && dashboardService?.getSummary) {
+    try {
+      const result = await dashboardService.getSummary(userId);
+      if (result) return res.json(result);
+    } catch (e) {
+      // fallback
+    }
+  }
+
   let totalSent = 12;
   let totalOptimized = 28;
   let recipientCount = 5;
@@ -31,3 +42,6 @@ exports.getSummary = async (req, res) => {
     ],
   });
 };
+
+exports.summary = exports.getSummary;
+

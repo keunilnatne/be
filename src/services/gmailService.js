@@ -1,20 +1,46 @@
+const env = require('../config/env');
 const { google } = require('googleapis');
+const { GmailIntegration } = require('../models');
 const googleAuthService = require('./googleAuthService');
+const tokenEncryption = require('./tokenEncryptionService');
+const ApiError = require('../utils/ApiError');
+
+const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
+
+function base64Url(value) {
+  return Buffer.from(value).toString('base64url');
+}
+
+function encodeHeader(value) {
+  return `=?UTF-8?B?${Buffer.from(value).toString('base64')}?=`;
+}
+
+function createRawMessage({ to, subject, body }) {
+  const normalizedBody = String(body || '').replace(/\r?\n/g, '\r\n');
+  const message = [
+    `To: ${to}`,
+    `Subject: ${encodeHeader(subject)}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    Buffer.from(normalizedBody).toString('base64'),
+  ].join('\r\n');
+  return base64Url(message);
+}
 
 function extractPlainTextBody(payload) {
   if (!payload) return '';
-
   if (payload.mimeType === 'text/plain' && payload.body?.data) {
     return Buffer.from(payload.body.data, 'base64').toString('utf-8');
   }
-
   if (payload.parts) {
     for (const part of payload.parts) {
       const text = extractPlainTextBody(part);
       if (text) return text;
     }
   }
-
   return '';
 }
 
@@ -67,27 +93,65 @@ async function getMessage(userId, messageId) {
   };
 }
 
-function buildRawMessage({ to, subject, body }) {
-  const encodedSubject = `=?UTF-8?B?${Buffer.from(subject, 'utf-8').toString('base64')}?=`;
-  const message = [
-    `To: ${to}`,
-    'Content-Type: text/plain; charset=utf-8',
-    'MIME-Version: 1.0',
-    `Subject: ${encodedSubject}`,
-    '',
-    body,
-  ].join('\n');
+async function getAccessToken(userId) {
+  const integration = await GmailIntegration.findOne({ where: { userId } });
+  if (!integration) {
+    throw ApiError.badRequest('Gmail 계정이 연결되어 있지 않습니다.');
+  }
 
-  return Buffer.from(message).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const response = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: env.google.clientId,
+      client_secret: env.google.clientSecret,
+      refresh_token: tokenEncryption.decrypt(integration.encryptedRefreshToken),
+      grant_type: 'refresh_token',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.access_token) {
+    throw ApiError.badRequest('Gmail 인증이 만료되었습니다. 계정을 다시 연결해 주세요.', payload);
+  }
+  return payload.access_token;
 }
 
-async function sendMessage(userId, { to, subject, body }) {
+// Polymorphic sendMessage supporting both sendMessage(userId, {to, subject, body}) and sendMessage({accessToken, to, subject, body})
+async function sendMessage(arg1, arg2) {
+  if (typeof arg1 === 'object' && arg1.accessToken) {
+    const { accessToken, to, subject, body } = arg1;
+    const response = await fetch(SEND_URL, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ raw: createRawMessage({ to, subject, body }) }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload.error?.message || 'Gmail 발송에 실패했습니다.');
+      error.statusCode = response.status;
+      throw error;
+    }
+    return payload;
+  }
+
+  const userId = arg1;
+  const { to, subject, body } = arg2 || {};
   const auth = await googleAuthService.getAuthorizedClientForUser(userId);
   const gmail = google.gmail({ version: 'v1', auth });
 
-  const raw = buildRawMessage({ to, subject, body });
+  const raw = createRawMessage({ to, subject, body });
   const { data } = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
   return data;
 }
 
-module.exports = { listMessages, getMessage, sendMessage };
+module.exports = {
+  createRawMessage,
+  getAccessToken,
+  sendMessage,
+  listMessages,
+  getMessage,
+};
+

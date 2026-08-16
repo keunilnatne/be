@@ -1,12 +1,19 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { User, UserSetting, Company } = require('../models');
 const env = require('../config/env');
-const { User, UserSetting } = require('../models');
 const googleAuthService = require('../services/googleAuthService');
 const ApiError = require('../utils/ApiError');
+const serializeUser = require('../utils/serializeUser');
+
+const PASSWORD_MIN_LENGTH = 6;
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
 
 function generateToken(user) {
-  return jwt.sign({ id: user.id, email: user.email }, env.jwt.secret, {
+  return jwt.sign({ id: user.id, email: user.email, sub: String(user.id) }, env.jwt.secret, {
     expiresIn: env.jwt.expiresIn || '7d',
   });
 }
@@ -17,7 +24,8 @@ function serializeAuthUser(user) {
     name: user.name,
     email: user.email,
     jobRole: user.jobRole || '',
-    jobTitle: user.jobTitle || '',
+    jobTitle: user.jobTitle || user.position || '',
+    position: user.position || user.jobTitle || '',
     team: user.team || '',
     companyId: user.companyId || null,
     companyName: user.companyName || '',
@@ -30,7 +38,8 @@ function serializeAuthUser(user) {
 
 // POST /api/auth/signup - 이메일 회원가입
 exports.signup = async (req, res) => {
-  const { name, email, password, jobRole, team, companyName } = req.body;
+  const email = normalizeEmail(req.body.email);
+  const { name, password, jobRole, jobTitle, position, team, companyName, companyId } = req.body;
   if (!name || !email || !password) {
     throw ApiError.badRequest('이름, 이메일, 비밀번호는 필수입니다.');
   }
@@ -45,23 +54,32 @@ exports.signup = async (req, res) => {
     name,
     email,
     password: hashedPassword,
+    passwordHash: hashedPassword,
+    authProvider: 'local',
+    accountRole: 'user',
     jobRole: jobRole || '',
+    jobTitle: jobTitle || position || '',
+    position: position || jobTitle || '',
     team: team || '',
+    companyId: companyId || null,
     companyName: companyName || '',
   });
 
-  await UserSetting.create({ userId: user.id });
+  await UserSetting.findOrCreate({ where: { userId: user.id } });
 
   const token = generateToken(user);
   res.status(201).json({
     token,
+    accessToken: token,
+    tokenType: 'Bearer',
     user: serializeAuthUser(user),
   });
 };
 
 // POST /api/auth/login - 이메일 로그인
 exports.login = async (req, res) => {
-  const { email, password } = req.body;
+  const email = normalizeEmail(req.body.email);
+  const { password } = req.body;
   if (!email || !password) {
     throw ApiError.badRequest('이메일과 비밀번호를 입력해 주세요.');
   }
@@ -71,11 +89,12 @@ exports.login = async (req, res) => {
     throw ApiError.unauthorized('이메일 또는 비밀번호가 올바르지 않습니다.');
   }
 
-  if (!user.password) {
+  const userPassword = user.password || user.passwordHash;
+  if (!userPassword) {
     throw ApiError.badRequest('구글 로그인 계정입니다. 구글 로그인을 이용해 주세요.');
   }
 
-  const isMatch = await bcrypt.compare(password, user.password);
+  const isMatch = await bcrypt.compare(password, userPassword);
   if (!isMatch) {
     throw ApiError.unauthorized('이메일 또는 비밀번호가 올바르지 않습니다.');
   }
@@ -83,8 +102,10 @@ exports.login = async (req, res) => {
   const token = generateToken(user);
   res.json({
     token,
-    user: serializeAuthUser(user),
-  });
+  }
+
+  res.json(await authResponse(user));
+>>>>>>> origin/dev/hong
 };
 
 // PUT /api/auth/password - 비밀번호 변경

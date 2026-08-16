@@ -1,37 +1,11 @@
 const env = require('../config/env');
 
-function buildPrompt({ originalText, purpose, tags, language, timeContext }) {
-  const guidelines = tags && tags.length
-    ? tags.map((t) => `- [${t.category}] ${t.label}: ${t.promptGuideline}`).join('\n')
-    : '- 특별한 선호 정보 없음. 일반적인 업무 문체로 작성하세요.';
-
-  const languageInstruction = language
-    ? `모든 결과는 반드시 "${language}"로 작성하세요. (원문이 다른 언어여도 "${language}"로 번역해서 작성)`
-    : '원문과 동일한 언어로 작성하세요.';
-
-  const timeBlock = timeContext
-    ? `\n[시간대 변환 정보 - 메시지에 자연스럽게 반영, 시각 왜곡 금지]\n${timeContext}\n`
-    : '';
-
-  return `당신은 업무 메시지를 수신자 성향에 맞게 변환하는 어시스턴트입니다.
-
-[원문 메시지]
-${originalText}
-
-[메시지 목적]
-${purpose || '명시되지 않음'}
-
-[수신자가 선호하는 스타일 - 반드시 반영]
-${guidelines}
-
-[출력 언어]
-${languageInstruction}
-${timeBlock}
-[지시사항]
-1. 원문의 핵심 의미와 사실(날짜, 담당자, 수치 등)은 절대 임의로 바꾸지 마세요.
-2. 위 선호 스타일을 최대한 반영해 메시지를 다시 작성하세요.
-3. 시간대 변환 정보가 주어졌다면, 원문의 시각을 수신자 기준 시각으로 바꿔서 메시지에 반영하세요 (필요하면 발신자 기준 시각도 괄호로 함께 표기).
-4. 변환된 메시지 본문만 출력하세요. 다른 설명, 따옴표, 마크다운 제목은 붙이지 마세요.`;
+function ensureAiConfigured() {
+  if (!env.ai.apiUrl || !env.ai.apiKey || !env.ai.model) {
+    const error = new Error('AI 서비스 환경변수가 설정되지 않았습니다.');
+    error.statusCode = 503;
+    throw error;
+  }
 }
 
 async function callGemini(prompt) {
@@ -40,36 +14,49 @@ async function callGemini(prompt) {
   }
 
   const url = `${env.ai.apiUrl}/models/${env.ai.model}:generateContent?key=${env.ai.apiKey}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
   try {
-    const res = await fetch(url, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      signal: controller.signal,
     });
-    const data = await res.json();
+    const data = await response.json();
 
-    if (!res.ok) {
+    if (!response.ok) {
       console.warn('[Gemini API Notice]:', data?.error?.message || 'API Call failed');
       return null;
     }
 
-    return (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-  } catch (err) {
-    console.warn('[Gemini API Exception]:', err.message);
+    const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('');
+    return text ? text.trim() : null;
+  } catch (error) {
+    console.warn('[Gemini API Exception]:', error.message);
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
-async function convertMessage({ originalText, purpose, tags, language, timeContext }) {
-  const prompt = buildPrompt({ originalText, purpose, tags, language, timeContext });
-  let convertedText = await callGemini(prompt);
-  if (!convertedText) {
-    convertedText = originalText;
+function parseJsonResponse(raw) {
+  if (!raw) return {};
+  const cleaned = raw.replace(/```json|```/gi, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return {};
   }
-  return { convertedText };
 }
 
-function buildMultiRecipientPrompt({ recipients, subject, body, companyDna }) {
+function clampScore(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : fallback;
+}
+
+function buildMultiRecipientPrompt({ recipients = [], subject, body, companyDna }) {
   const recipientsInfo = recipients.map((r, i) => `
 [수신자 ${i + 1}]
 - 이름: ${r.name || '수신자'}
@@ -115,72 +102,118 @@ ${recipientsInfo}
 }`;
 }
 
-async function optimizeMessage({ recipients = [], subject = '', body = '', companyDna = null }) {
-  const primaryRecipient = recipients[0] || {};
-  const prompt = buildMultiRecipientPrompt({ recipients, subject, body, companyDna });
+async function optimizeMessage(input) {
+  // Support both object arguments { recipients, subject, body, companyDna } and { subject, body, context, requiredFacts }
+  if (input.recipients !== undefined) {
+    const { recipients = [], subject = '', body = '', companyDna = null } = input;
+    const prompt = buildMultiRecipientPrompt({ recipients, subject, body, companyDna });
+    const aiRaw = await callGemini(prompt);
+    let resultSubject = subject;
+    let resultBody = body;
 
-  let aiRaw = await callGemini(prompt);
-  let resultSubject = subject;
-  let resultBody = body;
-
-  if (aiRaw) {
-    try {
-      const cleaned = aiRaw.replace(/```json|```/gi, '').trim();
-      const parsed = JSON.parse(cleaned);
-      if (parsed.optimizedSubject) resultSubject = parsed.optimizedSubject;
-      if (parsed.optimizedBody) resultBody = parsed.optimizedBody;
-    } catch {
-      if (aiRaw.length > 5) {
-        resultBody = aiRaw;
+    if (aiRaw) {
+      try {
+        const parsed = parseJsonResponse(aiRaw);
+        if (parsed.optimizedSubject) resultSubject = parsed.optimizedSubject;
+        if (parsed.optimizedBody) resultBody = parsed.optimizedBody;
+      } catch {
+        if (aiRaw.length > 5) resultBody = aiRaw;
       }
     }
+
+    const recipientResults = recipients.map((r) => ({
+      recipientId: r.id || null,
+      recipientName: r.name || '수신자',
+      recipientEmail: r.email || '',
+      optimizedSubject: resultSubject,
+      optimizedBody: resultBody,
+      appliedContext: {
+        language: r.language || 'Korean',
+        timezone: r.timezone || 'Asia/Seoul',
+        position: r.jobRole || r.position || r.role || '직무',
+        relationship: r.relationship || r.organizationRelation || '협업 관계',
+      },
+      qualityScore: 92,
+      status: 'converted',
+    }));
+
+    return {
+      subject: resultSubject,
+      body: resultBody,
+      recipientResults,
+    };
   }
 
-  const recipientResults = recipients.map((r) => ({
-    recipientId: r.id || null,
-    recipientName: r.name || '수신자',
-    recipientEmail: r.email || '',
-    optimizedSubject: resultSubject,
-    optimizedBody: resultBody,
-    appliedContext: {
-      language: r.language || 'Korean',
-      timezone: r.timezone || 'Asia/Seoul',
-      position: r.jobRole || r.position || r.role || '직무',
-      relationship: r.relationship || r.organizationRelation || '협업 관계',
-    },
-    qualityScore: 92,
-    status: 'converted',
-  }));
-
+  // dev/hong style optimization
+  const prompt = `당신은 업무 메시지 편집 AI입니다.
+[제목] ${input.subject}
+[본문] ${input.body}
+[맥락] ${JSON.stringify(input.context || {}, null, 2)}
+JSON만 출력: {"subject":"최적화된 제목","body":"최적화된 본문","qualityScore":92}`;
+  const raw = await callGemini(prompt);
+  const parsed = parseJsonResponse(raw);
   return {
-    subject: resultSubject,
-    body: resultBody,
-    recipientResults,
+    subject: parsed.subject || input.subject,
+    body: parsed.body || input.body,
+    qualityScore: parsed.qualityScore || 90,
   };
+}
+
+function buildQualityPrompt({ subject, body, purpose, recipientContext }) {
+  return `당신은 비즈니스 메시지 품질 평가 AI입니다.
+[제목] ${subject}
+[본문] ${body}
+[목적] ${purpose || '업무 소통'}
+[수신자] ${JSON.stringify(recipientContext || {}, null, 2)}
+JSON만 출력:
+{"overallScore":92,"breakdown":{"clarity":90,"tone":95,"culturalFit":90,"actionability":93},"strengths":["명확한 요청"],"improvements":["세부 일정 표기 권장"],"summary":"적절한 격식의 비즈니스 메시지입니다."}`;
+}
+
+async function analyzeQuality(input) {
+  const raw = await callGemini(buildQualityPrompt(input));
+  const parsed = parseJsonResponse(raw);
+  const breakdown = parsed.breakdown || { clarity: 90, tone: 95, culturalFit: 90, actionability: 93 };
+  return {
+    overallScore: clampScore(parsed.overallScore, 92),
+    breakdown,
+    strengths: Array.isArray(parsed.strengths) ? parsed.strengths : ['핵심 내용이 명확합니다.'],
+    improvements: Array.isArray(parsed.improvements) ? parsed.improvements : ['일정 표기 보완 권장'],
+    summary: parsed.summary || '수신자 맥락이 잘 반영된 메시지입니다.',
+  };
+}
+
+async function convertMessage({ originalText, purpose, tags, language }) {
+  const guidelines = tags && tags.length
+    ? tags.map((t) => `- [${t.category}] ${t.label}: ${t.promptGuideline}`).join('\n')
+    : '- 일반적인 비즈니스 정중체';
+  const prompt = `비즈니스 메시지 변환:\n[원문] ${originalText}\n[목적] ${purpose || ''}\n[스타일] ${guidelines}\n변환된 텍스트만 출력하세요.`;
+  const raw = await callGemini(prompt);
+  return { convertedText: raw || originalText };
 }
 
 async function inferTags({ sampleText, taxonomy }) {
   if (!taxonomy || !taxonomy.length) return [];
   const taxonomyText = taxonomy
-    .map((t) => `- category="${t.category}", name="${t.name}" (${t.label}): ${t.promptGuideline}`)
+    .map((tag) => `- category="${tag.category}", name="${tag.name}" (${tag.label}): ${tag.promptGuideline}`)
     .join('\n');
-
-  const prompt = `당신은 커뮤니케이션 스타일 분석기입니다. 아래 텍스트를 보고 이 사람에게 맞는 소통 스타일을 분류하세요.
-[가능한 태그]
+  const prompt = `아래 텍스트에 가장 적합한 태그를 골라 JSON 배열로 출력하세요:
+[목록]
 ${taxonomyText}
 [텍스트]
-${sampleText}`;
-
+${sampleText}
+[출력 예시]
+[{"category":"tone","name":"formal","reason":"격식체 사용"}]`;
   const raw = await callGemini(prompt);
-  if (!raw) return [];
-
-  const cleaned = raw.replace(/```json|```/gi, '').trim();
-  try {
-    const parsed = JSON.parse(cleaned);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  const parsed = parseJsonResponse(raw);
+  return Array.isArray(parsed) ? parsed : [];
 }
 
-module.exports = { convertMessage, inferTags, optimizeMessage };
+module.exports = {
+  callGemini,
+  parseJsonResponse,
+  optimizeMessage,
+  analyzeQuality,
+  convertMessage,
+  inferTags,
+};
+

@@ -10,6 +10,7 @@ const Message = require('./Message');
 const MessageResult = require('./MessageResult');
 const MessageAnalysis = require('./MessageAnalysis');
 const TeamMemory = require('./TeamMemory');
+const GmailIntegration = require('./GmailIntegration');
 
 Tag.hasMany(EntityTag, { foreignKey: 'tagId' });
 EntityTag.belongsTo(Tag, { foreignKey: 'tagId' });
@@ -40,6 +41,13 @@ Message.hasMany(MessageAnalysis, {
 });
 MessageAnalysis.belongsTo(Message, { foreignKey: 'messageId' });
 
+User.hasOne(GmailIntegration, {
+  foreignKey: 'userId',
+  as: 'GmailIntegration',
+  onDelete: 'CASCADE',
+});
+GmailIntegration.belongsTo(User, { foreignKey: 'userId', as: 'User' });
+
 module.exports = {
   sequelize,
   User,
@@ -52,4 +60,5 @@ module.exports = {
   MessageResult,
   MessageAnalysis,
   TeamMemory,
+  GmailIntegration,
 };

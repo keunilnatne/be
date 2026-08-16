@@ -15,6 +15,7 @@
     "test:db:messages": "node src/scripts/verifyMessageModels.js",
     "test:integration:optimize": "node src/scripts/verifyMessageOptimization.js",
     "test:db:team-memory": "node src/scripts/verifyTeamMemory.js",
+    "test:db:gmail": "node src/scripts/verifyGmailIntegration.js",
     "db:seed": "node src/scripts/seedDemo.js"
   },
   "dependencies": {

@@ -7,6 +7,7 @@ const recipientRoutes = require('./recipient.routes');
 const messageRoutes = require('./message.routes');
 const tagRoutes = require('./tag.routes');
 const teamMemoryRoutes = require('./teamMemory.routes');
+const gmailIntegrationRoutes = require('./gmailIntegration.routes');
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use('/messages', messageRoutes);
 // 직무, 문체, 조직 특성 태그 마스터
 router.use('/tags', tagRoutes);
 router.use('/team-memory', teamMemoryRoutes);
+router.use('/integrations/gmail', gmailIntegrationRoutes);
 
 module.exports = router;

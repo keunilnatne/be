@@ -22,4 +22,12 @@ module.exports = {
     apiKey: process.env.AI_API_KEY,
     model: process.env.AI_MODEL || 'gpt-4o-mini',
   },
+
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri: process.env.GOOGLE_REDIRECT_URI,
+    tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY,
+    frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
+  },
 };

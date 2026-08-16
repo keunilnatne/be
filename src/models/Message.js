@@ -1,37 +1,19 @@
 const { DataTypes, Model } = require('sequelize');
 const sequelize = require('../config/database');
 
+// 한 번의 메시지 작성 및 최적화 요청을 저장한다.
+// 공용 Railway DB의 기존 컬럼 명세를 그대로 사용한다.
 class Message extends Model {}
 
 Message.init(
   {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-    senderId: { type: DataTypes.INTEGER, allowNull: false },
-
-    // 기존 단일 수신자 변환 API와의 호환을 위해 유지한다.
-    recipientId: { type: DataTypes.INTEGER, allowNull: true },
-
-    originalSubject: { type: DataTypes.TEXT, allowNull: false, defaultValue: '' },
-    originalBody: { type: DataTypes.TEXT('long'), allowNull: false },
+    senderId: { type: DataTypes.INTEGER, allowNull: true },
+    originalSubject: { type: DataTypes.STRING, allowNull: true },
+    originalBody: { type: DataTypes.TEXT, allowNull: true },
     purpose: { type: DataTypes.STRING, allowNull: true },
-    channel: { type: DataTypes.STRING, allowNull: false, defaultValue: 'email' },
-    status: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      defaultValue: 'draft',
-      validate: {
-        isIn: [[
-          'draft',
-          'optimizing',
-          'optimized',
-          'partially_failed',
-          'failed',
-          'partially_sent',
-          'sent',
-        ]],
-      },
-    },
-    optimizedAt: { type: DataTypes.DATE, allowNull: true },
+    priority: { type: DataTypes.STRING, allowNull: true, defaultValue: 'HIGH' },
+    status: { type: DataTypes.STRING, allowNull: true, defaultValue: 'optimized' },
   },
   { sequelize, modelName: 'Message', tableName: 'messages' }
 );

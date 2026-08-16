@@ -1,6 +1,8 @@
 const { DataTypes, Model } = require('sequelize');
 const sequelize = require('../config/database');
 
+// 한 Message에 속한 수신자별 AI 최적화 및 Gmail 발송 결과를 저장한다.
+// 공용 Railway DB의 기존 컬럼은 삭제하거나 변경하지 않고 그대로 매핑한다.
 class MessageResult extends Model {}
 
 MessageResult.init(
@@ -8,51 +10,24 @@ MessageResult.init(
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     messageId: { type: DataTypes.INTEGER, allowNull: false },
     recipientId: { type: DataTypes.INTEGER, allowNull: true },
-
-    // 수신자 정보가 변경되거나 삭제되어도 당시 전송 이력을 보존한다.
-    recipientName: { type: DataTypes.STRING, allowNull: false },
-    recipientEmail: { type: DataTypes.STRING, allowNull: false },
-    targetLanguage: { type: DataTypes.STRING, allowNull: true },
-
-    generatedSubject: { type: DataTypes.TEXT, allowNull: true },
-    generatedBody: { type: DataTypes.TEXT('long'), allowNull: true },
-    finalSubject: { type: DataTypes.TEXT, allowNull: true },
-    finalBody: { type: DataTypes.TEXT('long'), allowNull: true },
-    appliedContexts: { type: DataTypes.JSON, allowNull: false, defaultValue: [] },
-    qualityScore: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
-
+    recipientName: { type: DataTypes.STRING, allowNull: true },
+    recipientEmail: { type: DataTypes.STRING, allowNull: true },
+    optimizedSubject: { type: DataTypes.STRING, allowNull: true },
+    optimizedBody: { type: DataTypes.TEXT, allowNull: true },
+    finalSubject: { type: DataTypes.STRING, allowNull: true },
+    finalBody: { type: DataTypes.TEXT, allowNull: true },
+    appliedContext: { type: DataTypes.JSON, allowNull: true },
+    qualityScore: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 90 },
     status: {
       type: DataTypes.STRING,
-      allowNull: false,
-      defaultValue: 'pending',
-      validate: {
-        isIn: [[
-          'pending',
-          'optimizing',
-          'optimized',
-          'generation_failed',
-          'send_pending',
-          'sending',
-          'sent',
-          'send_failed',
-        ]],
-      },
+      allowNull: true,
+      defaultValue: 'converted',
+      validate: { isIn: [['converted', 'sent', 'failed']] },
     },
-    generationError: { type: DataTypes.TEXT, allowNull: true },
-    sendError: { type: DataTypes.TEXT, allowNull: true },
-    gmailMessageId: { type: DataTypes.STRING, allowNull: true },
     sentAt: { type: DataTypes.DATE, allowNull: true },
+    errorMessage: { type: DataTypes.TEXT, allowNull: true },
   },
-  {
-    sequelize,
-    modelName: 'MessageResult',
-    tableName: 'message_results',
-    indexes: [
-      { fields: ['message_id'] },
-      { fields: ['recipient_id'] },
-      { fields: ['status'] },
-    ],
-  }
+  { sequelize, modelName: 'MessageResult', tableName: 'message_results' }
 );
 
 module.exports = MessageResult;

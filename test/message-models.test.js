@@ -8,7 +8,7 @@ const {
   Recipient,
 } = require('../src/models');
 
-test('Message represents one writing request', async () => {
+test('Message matches the shared database writing-request schema', async () => {
   const message = Message.build({
     senderId: 1,
     originalSubject: '프로젝트 일정 확인',
@@ -16,33 +16,31 @@ test('Message represents one writing request', async () => {
   });
 
   await message.validate();
-  assert.equal(message.status, 'draft');
-  assert.equal(message.channel, 'email');
+  assert.equal(message.status, 'optimized');
+  assert.equal(message.priority, 'HIGH');
 });
 
-test('MessageResult keeps each recipient result and delivery status separately', async () => {
+test('MessageResult keeps each recipient result separately', async () => {
   const first = MessageResult.build({
     messageId: 1,
     recipientId: 10,
     recipientName: 'Alex',
     recipientEmail: 'alex@example.com',
-    targetLanguage: 'en',
-    generatedSubject: 'Project schedule review',
-    generatedBody: 'Please review it by August 20.',
-    appliedContexts: [{ type: 'recipient', value: 'concise' }],
-    status: 'optimized',
+    optimizedSubject: 'Project schedule review',
+    optimizedBody: 'Please review it by August 20.',
+    appliedContext: { language: 'English', style: 'concise' },
+    status: 'converted',
   });
   const second = MessageResult.build({
     messageId: 1,
     recipientId: 11,
     recipientName: '유키',
     recipientEmail: 'yuki@example.com',
-    targetLanguage: 'ja',
   });
 
   await Promise.all([first.validate(), second.validate()]);
-  assert.equal(first.status, 'optimized');
-  assert.equal(second.status, 'pending');
+  assert.equal(first.status, 'converted');
+  assert.equal(second.status, 'converted');
   assert.notEqual(first.recipientId, second.recipientId);
 });
 
@@ -53,13 +51,7 @@ test('message model associations support history queries', () => {
   assert.equal(MessageResult.associations.Message.target, Message);
 });
 
-test('invalid message states are rejected', async () => {
-  const result = MessageResult.build({
-    messageId: 1,
-    recipientName: 'Alex',
-    recipientEmail: 'alex@example.com',
-    status: 'unknown',
-  });
-
+test('invalid shared-database result states are rejected', async () => {
+  const result = MessageResult.build({ messageId: 1, status: 'unknown' });
   await assert.rejects(result.validate(), /Validation isIn on status failed/);
 });

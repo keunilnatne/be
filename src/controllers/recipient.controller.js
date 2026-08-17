@@ -113,6 +113,14 @@ async function ensureSeedRecipients() {
   }
 }
 
+function ownedRecipientWhere(userId, recipientId) {
+  const where = { ownerUserId: userId };
+  if (recipientId !== undefined) where.id = recipientId;
+  return where;
+}
+
+exports.ownedRecipientWhere = ownedRecipientWhere;
+
 async function serializeRecipient(recipient) {
   const tags = await tagService.getTagsForEntity('recipient', recipient.id);
   return {
@@ -144,9 +152,8 @@ async function serializeRecipient(recipient) {
 }
 
 exports.list = async (req, res) => {
-  await ensureSeedRecipients();
   const { q, tab } = req.query;
-  const where = {};
+  const where = ownedRecipientWhere(req.user.id);
 
   if (tab === 'favorite') {
     where.isFavorite = true;
@@ -199,6 +206,7 @@ exports.create = async (req, res) => {
   }
 
   const recipient = await Recipient.create({
+    ownerUserId: req.user.id,
     name,
     email,
     jobRole: jobRole || role || position || '',
@@ -228,13 +236,17 @@ exports.create = async (req, res) => {
 };
 
 exports.getOne = async (req, res) => {
-  const recipient = await Recipient.findByPk(req.params.recipientId);
+  const recipient = await Recipient.findOne({
+    where: ownedRecipientWhere(req.user.id, req.params.recipientId),
+  });
   if (!recipient) throw ApiError.notFound('수신자를 찾을 수 없습니다.');
   res.json(await serializeRecipient(recipient));
 };
 
 exports.update = async (req, res) => {
-  const recipient = await Recipient.findByPk(req.params.recipientId);
+  const recipient = await Recipient.findOne({
+    where: ownedRecipientWhere(req.user.id, req.params.recipientId),
+  });
   if (!recipient) throw ApiError.notFound('수신자를 찾을 수 없습니다.');
 
   const {
@@ -293,7 +305,9 @@ exports.update = async (req, res) => {
 };
 
 exports.toggleFavorite = async (req, res) => {
-  const recipient = await Recipient.findByPk(req.params.recipientId);
+  const recipient = await Recipient.findOne({
+    where: ownedRecipientWhere(req.user.id, req.params.recipientId),
+  });
   if (!recipient) throw ApiError.notFound('수신자를 찾을 수 없습니다.');
 
   await recipient.update({ isFavorite: !recipient.isFavorite });
@@ -301,7 +315,9 @@ exports.toggleFavorite = async (req, res) => {
 };
 
 exports.delete = async (req, res) => {
-  const recipient = await Recipient.findByPk(req.params.recipientId);
+  const recipient = await Recipient.findOne({
+    where: ownedRecipientWhere(req.user.id, req.params.recipientId),
+  });
   if (!recipient) throw ApiError.notFound('수신자를 찾을 수 없습니다.');
 
   await recipient.destroy();

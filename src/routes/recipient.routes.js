@@ -1,7 +1,10 @@
 const { Router } = require('express');
 const recipientController = require('../controllers/recipient.controller');
+const authenticate = require('../middlewares/auth');
 
 const router = Router();
+
+router.use(authenticate);
 
 router.get('/', recipientController.list);
 router.post('/', recipientController.create);

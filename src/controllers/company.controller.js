@@ -168,32 +168,55 @@ exports.extractFromFile = async (req, res) => {
 
 /**
  * POST /api/company-dna/extract/gmail
- * Gmail 보낸 메일에서 Company DNA 자동 추출
+ * Gmail 이메일에서 Company DNA 자동 추출
  */
 exports.extractFromGmail = async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: '인증이 필요합니다.' });
+      return res.status(401).json({ error: { message: '인증이 필요합니다. 먼저 로그인해 주세요.' } });
     }
 
-    // 1. Gmail OAuth 클라이언트로 보낸 메일 조회
-    const auth = await googleAuthService.getAuthorizedClientForUser(userId);
-    const gmail = google.gmail({ version: 'v1', auth });
+    // 1. Gmail OAuth 클라이언트 가져오기
+    let auth;
+    try {
+      auth = await googleAuthService.getAuthorizedClientForUser(userId);
+    } catch (authErr) {
+      return res.status(400).json({
+        error: {
+          message: '연결된 Gmail 계정이 없습니다. [설정 > 계정 연동] 또는 Google 로그인으로 Gmail을 먼저 연결해 주세요.',
+        },
+      });
+    }
 
+    const gmail = google.gmail({ version: 'v1', auth });
     const maxResults = parseInt(req.body.maxResults, 10) || 25;
-    const { data } = await gmail.users.messages.list({
+
+    // 2. 보낸 메일 우선 조회 (부족 시 전체 메일함 조회)
+    let listRes = await gmail.users.messages.list({
       userId: 'me',
       maxResults,
       q: 'in:sent',
     });
 
-    const messageIds = data.messages || [];
+    let messageIds = listRes.data.messages || [];
     if (messageIds.length < 3) {
-      return res.status(400).json({ error: '분석에 필요한 보낸 이메일이 부족합니다. (최소 3건 필요)' });
+      listRes = await gmail.users.messages.list({
+        userId: 'me',
+        maxResults,
+      });
+      messageIds = listRes.data.messages || [];
     }
 
-    // 2. 각 이메일 본문 추출
+    if (messageIds.length < 3) {
+      return res.status(400).json({
+        error: {
+          message: `분석에 필요한 이메일이 부족합니다. (현재 ${messageIds.length}건, 최소 3건 필요)`,
+        },
+      });
+    }
+
+    // 3. 각 이메일 본문 추출
     const emails = await Promise.all(
       messageIds.map(async (m) => {
         try {
@@ -218,13 +241,15 @@ exports.extractFromGmail = async (req, res) => {
 
     const validEmails = emails.filter(Boolean);
     if (validEmails.length < 3) {
-      return res.status(400).json({ error: '이메일 본문을 추출할 수 없습니다. 다시 시도해주세요.' });
+      return res.status(400).json({
+        error: { message: '이메일 본문을 읽을 수 없습니다. Gmail 권한을 확인해 주세요.' },
+      });
     }
 
-    // 3. Gemini AI 구조화 추출
+    // 4. Gemini AI 구조화 추출
     const extracted = await extractFromEmails(validEmails);
 
-    // 4. DB 저장
+    // 5. DB 저장
     const companyId = req.body.companyId ? parseInt(req.body.companyId, 10) : 1;
     let dna = await getOrCreateDna(companyId);
     await dna.update({
@@ -253,7 +278,9 @@ exports.extractFromGmail = async (req, res) => {
     });
   } catch (err) {
     console.error('[CompanyDNA extractFromGmail Error]:', err.message);
-    res.status(500).json({ error: err.message || 'Gmail 기반 Company DNA 추출에 실패했습니다.' });
+    res.status(err.statusCode || 500).json({
+      error: { message: err.message || 'Gmail 기반 Company DNA 추출에 실패했습니다.' },
+    });
   }
 };
 

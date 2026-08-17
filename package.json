@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "node --test --test-isolation=none",
+    "test": "node --test",
     "test:db:messages": "node src/scripts/verifyMessageModels.js",
     "test:integration:optimize": "node src/scripts/verifyMessageOptimization.js",
     "test:db:team-memory": "node src/scripts/verifyTeamMemory.js",

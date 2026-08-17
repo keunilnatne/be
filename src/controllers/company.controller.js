@@ -1,4 +1,9 @@
 const { CompanyDna, Company } = require('../models');
+const { parseDocument } = require('../services/documentParserService');
+const { extractFromDocument, extractFromEmails } = require('../services/companyDnaExtractionService');
+const googleAuthService = require('../services/googleAuthService');
+const { google } = require('googleapis');
+const fs = require('fs');
 
 const defaultTerms = [
   { from: '검토 요청', to: '피드백 요청' },
@@ -96,3 +101,175 @@ exports.updateDna = async (req, res) => {
     aiEnabled: dna.aiEnabled,
   });
 };
+
+// ── Company DNA 자동 추출 엔드포인트 ──
+
+/**
+ * POST /api/company-dna/extract/file
+ * 업로드된 문서(PDF/DOCX/TXT)에서 Company DNA 자동 추출
+ */
+exports.extractFromFile = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: '파일이 업로드되지 않았습니다.' });
+    }
+
+    const { path: filePath, originalname } = req.file;
+
+    // 1. 문서 파싱 → plain text
+    const text = await parseDocument(filePath, originalname);
+
+    // 임시 파일 삭제
+    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+
+    if (!text || text.trim().length < 50) {
+      return res.status(400).json({ error: '문서에서 추출된 텍스트가 너무 짧습니다. (최소 50자 이상의 내용이 필요합니다)' });
+    }
+
+    // 2. Gemini AI 구조화 추출
+    const extracted = await extractFromDocument(text);
+
+    // 3. DB 저장 (upsert)
+    const companyId = req.body.companyId ? parseInt(req.body.companyId, 10) : 1;
+    let dna = await getOrCreateDna(companyId);
+    await dna.update({
+      decisionStructure: extracted.decisionStructure,
+      channels: extracted.channels,
+      reporting: extracted.reporting,
+      terms: extracted.terms,
+      rules: extracted.rules,
+      accuracy: extracted.accuracy,
+      aiEnabled: true,
+    });
+
+    res.json({
+      message: 'Company DNA가 문서에서 자동 생성되었습니다.',
+      source: 'file',
+      fileName: originalname,
+      textLength: text.length,
+      dna: {
+        decisionStructure: dna.decisionStructure,
+        channels: dna.channels,
+        reporting: dna.reporting,
+        terms: dna.terms,
+        rules: dna.rules,
+        accuracy: dna.accuracy,
+        aiEnabled: dna.aiEnabled,
+      },
+    });
+  } catch (err) {
+    if (req.file?.path) {
+      try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+    }
+    console.error('[CompanyDNA extractFromFile Error]:', err.message);
+    res.status(500).json({ error: err.message || 'Company DNA 추출에 실패했습니다.' });
+  }
+};
+
+/**
+ * POST /api/company-dna/extract/gmail
+ * Gmail 보낸 메일에서 Company DNA 자동 추출
+ */
+exports.extractFromGmail = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: '인증이 필요합니다.' });
+    }
+
+    // 1. Gmail OAuth 클라이언트로 보낸 메일 조회
+    const auth = await googleAuthService.getAuthorizedClientForUser(userId);
+    const gmail = google.gmail({ version: 'v1', auth });
+
+    const maxResults = parseInt(req.body.maxResults, 10) || 25;
+    const { data } = await gmail.users.messages.list({
+      userId: 'me',
+      maxResults,
+      q: 'in:sent',
+    });
+
+    const messageIds = data.messages || [];
+    if (messageIds.length < 3) {
+      return res.status(400).json({ error: '분석에 필요한 보낸 이메일이 부족합니다. (최소 3건 필요)' });
+    }
+
+    // 2. 각 이메일 본문 추출
+    const emails = await Promise.all(
+      messageIds.map(async (m) => {
+        try {
+          const { data: msg } = await gmail.users.messages.get({
+            userId: 'me',
+            id: m.id,
+            format: 'full',
+          });
+          const headers = Object.fromEntries(
+            (msg.payload?.headers || []).map((h) => [h.name, h.value])
+          );
+          const body = extractPlainTextBody(msg.payload);
+          return {
+            subject: headers.Subject || '(제목 없음)',
+            body: body || msg.snippet || '',
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    const validEmails = emails.filter(Boolean);
+    if (validEmails.length < 3) {
+      return res.status(400).json({ error: '이메일 본문을 추출할 수 없습니다. 다시 시도해주세요.' });
+    }
+
+    // 3. Gemini AI 구조화 추출
+    const extracted = await extractFromEmails(validEmails);
+
+    // 4. DB 저장
+    const companyId = req.body.companyId ? parseInt(req.body.companyId, 10) : 1;
+    let dna = await getOrCreateDna(companyId);
+    await dna.update({
+      decisionStructure: extracted.decisionStructure,
+      channels: extracted.channels,
+      reporting: extracted.reporting,
+      terms: extracted.terms,
+      rules: extracted.rules,
+      accuracy: extracted.accuracy,
+      aiEnabled: true,
+    });
+
+    res.json({
+      message: 'Company DNA가 Gmail 이메일에서 자동 생성되었습니다.',
+      source: 'gmail',
+      emailCount: validEmails.length,
+      dna: {
+        decisionStructure: dna.decisionStructure,
+        channels: dna.channels,
+        reporting: dna.reporting,
+        terms: dna.terms,
+        rules: dna.rules,
+        accuracy: dna.accuracy,
+        aiEnabled: dna.aiEnabled,
+      },
+    });
+  } catch (err) {
+    console.error('[CompanyDNA extractFromGmail Error]:', err.message);
+    res.status(500).json({ error: err.message || 'Gmail 기반 Company DNA 추출에 실패했습니다.' });
+  }
+};
+
+/**
+ * 이메일 payload에서 plain text 본문 추출 (재귀)
+ */
+function extractPlainTextBody(payload) {
+  if (!payload) return '';
+  if (payload.mimeType === 'text/plain' && payload.body?.data) {
+    return Buffer.from(payload.body.data, 'base64').toString('utf-8');
+  }
+  if (payload.parts) {
+    for (const part of payload.parts) {
+      const text = extractPlainTextBody(part);
+      if (text) return text;
+    }
+  }
+  return '';
+}

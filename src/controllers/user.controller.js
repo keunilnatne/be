@@ -111,16 +111,39 @@ exports.getMe = async (req, res) => {
 // PUT /api/users/me
 exports.updateMe = async (req, res) => {
   const user = req.user;
-  const { name, jobRole, jobTitle, position, team, companyName, companyId, tools, communicationPreferences, preferredStyle, customStyle, defaultLanguage, timezone, tagIds } = req.body;
+  const {
+    name,
+    role,
+    customRole,
+    jobRole,
+    jobTitle,
+    position,
+    team,
+    company,
+    companyName,
+    companyId,
+    tools,
+    communicationPreferences,
+    preferredStyle,
+    customStyle,
+    defaultLanguage,
+    timezone,
+    tagIds,
+  } = req.body;
+
+  const effectiveJobRole = jobRole !== undefined ? jobRole : (customRole || role);
+  const effectiveJobTitle = jobTitle !== undefined ? jobTitle : (position || effectiveJobRole);
+  const effectivePosition = position !== undefined ? position : (jobTitle || effectiveJobRole);
+  const effectiveCompanyName = companyName !== undefined ? companyName : company;
 
   await user.update({
     ...(name !== undefined && { name }),
-    ...(jobRole !== undefined && { jobRole }),
-    ...(jobTitle !== undefined && { jobTitle }),
-    ...(position !== undefined && { position }),
+    ...(effectiveJobRole !== undefined && { jobRole: effectiveJobRole }),
+    ...(effectiveJobTitle !== undefined && { jobTitle: effectiveJobTitle }),
+    ...(effectivePosition !== undefined && { position: effectivePosition }),
     ...(team !== undefined && { team }),
     ...(companyId !== undefined && { companyId }),
-    ...(companyName !== undefined && { companyName }),
+    ...(effectiveCompanyName !== undefined && { companyName: effectiveCompanyName }),
     ...(tools !== undefined && { tools }),
     ...(communicationPreferences !== undefined && { communicationPreferences }),
     ...(preferredStyle !== undefined && { preferredStyle }),

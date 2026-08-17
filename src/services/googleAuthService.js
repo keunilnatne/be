@@ -34,7 +34,7 @@ function getAuthUrl(userId) {
   });
 }
 
-// 콜백에서 받은 code를 토큰으로 교환하고, 어떤 Google 계정인지 확인해 JSON 저장소에 보관.
+// 콜백에서 받은 code를 토큰으로 교환하고, 어떤 Google 계정인지 확인해 DB에 보관.
 async function handleCallback(code, userId) {
   const client = createOAuth2Client();
   const { tokens } = await client.getToken(code);
@@ -43,17 +43,19 @@ async function handleCallback(code, userId) {
   const oauth2 = google.oauth2({ version: 'v2', auth: client });
   const { data: profile } = await oauth2.userinfo.get();
 
+  const existingAccount = await googleAccountStore.getByUserId(userId);
+
   return googleAccountStore.upsert(userId, {
     googleEmail: profile.email,
     accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token || googleAccountStore.getByUserId(userId)?.refreshToken,
+    refreshToken: tokens.refresh_token || existingAccount?.refreshToken,
     expiryDate: tokens.expiry_date || null,
   });
 }
 
-// 저장된 토큰으로 인증된 OAuth2 클라이언트 생성. 토큰이 갱신되면 저장소에 다시 기록.
+// 저장된 토큰으로 인증된 OAuth2 클라이언트 생성. 토큰이 갱신되면 DB에 다시 기록.
 async function getAuthorizedClientForUser(userId) {
-  const account = googleAccountStore.getByUserId(userId);
+  const account = await googleAccountStore.getByUserId(userId);
   if (!account) {
     const err = new Error('연결된 Gmail 계정이 없습니다. 먼저 Google 계정을 연결하세요.');
     err.statusCode = 404;
@@ -78,8 +80,8 @@ async function getAuthorizedClientForUser(userId) {
   return client;
 }
 
-function getStatus(userId) {
-  const account = googleAccountStore.getByUserId(userId);
+async function getStatus(userId) {
+  const account = await googleAccountStore.getByUserId(userId);
   return { connected: Boolean(account), email: account?.googleEmail || null };
 }
 

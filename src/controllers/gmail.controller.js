@@ -6,7 +6,7 @@ const ApiError = require('../utils/ApiError');
 exports.status = async (req, res) => {
   const { userId } = req.query;
   if (!userId) throw ApiError.badRequest('userId는 필수입니다.');
-  res.json(googleAuthService.getStatus(userId));
+  res.json(await googleAuthService.getStatus(userId));
 };
 
 exports.listInbox = async (req, res) => {

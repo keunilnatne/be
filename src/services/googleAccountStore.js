@@ -1,41 +1,85 @@
-const fs = require('fs');
-const path = require('path');
+const { GmailIntegration, User } = require('../models');
 
-// Gmail 연동(OAuth 토큰) 임시 저장소. DB 테이블 대신 로컬 JSON 파일 사용.
-// (토큰을 공유 DB에 넣지 않기 위함 + 스키마 변경 없이 빠르게 반복하기 위함)
-// TODO: 운영 단계에서는 암호화된 DB 컬럼 또는 별도 시크릿 스토어로 교체.
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const FILE_PATH = path.join(DATA_DIR, 'googleAccounts.json');
+/**
+ * googleAccountStore.js
+ * Google OAuth 토큰을 Railway MySQL의 gmail_integrations 테이블에 안전하게 저장/조회
+ */
 
-function ensureFile() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(FILE_PATH)) fs.writeFileSync(FILE_PATH, '{}', 'utf-8');
-}
+async function getByUserId(userId) {
+  if (!userId || userId === 'guest') return null;
+  const numId = Number(userId);
+  if (!Number.isFinite(numId)) return null;
 
-function readAll() {
-  ensureFile();
   try {
-    return JSON.parse(fs.readFileSync(FILE_PATH, 'utf-8'));
-  } catch {
-    return {};
+    const integration = await GmailIntegration.findOne({ where: { userId: numId } });
+    if (!integration) return null;
+
+    let tokenData = {};
+    try {
+      tokenData = JSON.parse(integration.encryptedRefreshToken);
+    } catch {
+      tokenData = { refreshToken: integration.encryptedRefreshToken };
+    }
+
+    return {
+      userId: numId,
+      googleEmail: integration.googleEmail,
+      accessToken: tokenData.accessToken || null,
+      refreshToken: tokenData.refreshToken || integration.encryptedRefreshToken,
+      expiryDate: tokenData.expiryDate || null,
+    };
+  } catch (err) {
+    console.error('[GoogleAccountStore getByUserId Error]:', err.message);
+    return null;
   }
 }
 
-function writeAll(data) {
-  ensureFile();
-  fs.writeFileSync(FILE_PATH, JSON.stringify(data, null, 2), 'utf-8');
-}
+async function upsert(userId, account) {
+  let numId = Number(userId);
 
-function getByUserId(userId) {
-  return readAll()[String(userId)] || null;
-}
+  // userId가 없거나 guest인 경우 googleEmail로 유저 조회/생성
+  if (!Number.isFinite(numId) || numId <= 0) {
+    if (account.googleEmail) {
+      try {
+        let user = await User.findOne({ where: { email: account.googleEmail } });
+        if (user) {
+          numId = user.id;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
 
-function upsert(userId, account) {
-  const all = readAll();
-  const key = String(userId);
-  all[key] = { ...(all[key] || {}), ...account, userId: Number(userId) };
-  writeAll(all);
-  return all[key];
+  if (Number.isFinite(numId) && numId > 0) {
+    try {
+      const existing = await GmailIntegration.findOne({ where: { userId: numId } });
+      const tokenPayload = JSON.stringify({
+        accessToken: account.accessToken,
+        refreshToken: account.refreshToken,
+        expiryDate: account.expiryDate,
+      });
+
+      if (existing) {
+        await existing.update({
+          googleEmail: account.googleEmail,
+          encryptedRefreshToken: tokenPayload,
+          connectedAt: new Date(),
+        });
+      } else {
+        await GmailIntegration.create({
+          userId: numId,
+          googleEmail: account.googleEmail,
+          encryptedRefreshToken: tokenPayload,
+          connectedAt: new Date(),
+        });
+      }
+    } catch (err) {
+      console.error('[GoogleAccountStore upsert Error]:', err.message);
+    }
+  }
+
+  return { ...account, userId: numId };
 }
 
 module.exports = { getByUserId, upsert };

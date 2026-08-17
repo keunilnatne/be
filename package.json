@@ -9,7 +9,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "dev": "nodemon -e js,json,env src/server.js",
+    "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "test": "node --test --test-isolation=none",
     "test:db:messages": "node src/scripts/verifyMessageModels.js",

@@ -154,7 +154,46 @@ exports.googleCallback = async (req, res) => {
   const { code, state } = req.query;
   if (!code) throw ApiError.badRequest('code가 필요합니다.');
 
-  const account = await googleAuthService.handleCallback(code, state);
+  let account;
+  try {
+    account = await googleAuthService.handleCallback(code, state);
+  } catch (err) {
+    console.warn('[Google Callback Exception]:', err.message || err);
+    const frontendUrl = process.env.FRONTEND_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173';
+
+    // 이미 사용된 코드나 세션 만료 시 500 에러 대신 사용자 친화적 팝업 안내 반환
+    return res.status(400).send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Google 로그인 안내</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc;">
+  <div style="text-align: center; background: white; padding: 32px 40px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); max-width: 400px;">
+    <div style="width: 48px; height: 48px; background: #fee2e2; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    </div>
+    <h3 style="color: #991b1b; margin: 0 0 8px 0; font-size: 17px; font-weight: 700;">Google 로그인 인증 세션 만료</h3>
+    <p style="color: #4b5563; font-size: 13px; line-height: 1.5; margin: 0 0 20px 0;">
+      인증 코드가 이미 사용되었거나 시간이 지났습니다.<br/>
+      Google 로그인 버튼을 다시 클릭해 주세요.
+    </p>
+    <button onclick="window.close();" style="cursor: pointer; padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 13px;">
+      창 닫기
+    </button>
+  </div>
+  <script>
+    try {
+      if (window.opener) {
+        window.opener.postMessage({ type: 'google-auth-error', error: '인증 세션이 만료되었습니다. 다시 로그인해 주세요.' }, window.location.origin);
+      }
+    } catch (e) {}
+  </script>
+</body>
+</html>
+    `);
+  }
 
   // DB에 Google 로그인 유저 자동 생성 및 업데이트
   let user = await User.findOne({ where: { email: account.googleEmail } });

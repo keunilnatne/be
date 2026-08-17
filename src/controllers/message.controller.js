@@ -161,6 +161,8 @@ function createAnalyzeQualityHandler(analyze = messageQualityService.analyze) {
 exports.createOptimizeHandler = createOptimizeHandler;
 exports.createSendHandler = createSendHandler;
 exports.createAnalyzeQualityHandler = createAnalyzeQualityHandler;
+exports.optimizeAuthenticated = createOptimizeHandler();
+exports.sendAuthenticated = createSendHandler();
 
 // POST /api/messages/optimize - 다중 수신자 AI 메시지 최적화 (프론트엔드 연동 & 확장 지원)
 exports.optimize = async (req, res) => {

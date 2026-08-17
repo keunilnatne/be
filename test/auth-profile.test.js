@@ -116,6 +116,9 @@ test('local auth and profile API flow', async (t) => {
   });
   assert.equal(unauthorizedSend.status, 401);
 
+  const unauthorizedDashboard = await request(baseUrl, '/api/dashboard/summary');
+  assert.equal(unauthorizedDashboard.status, 401);
+
   const authorization = { authorization: `Bearer ${login.body.accessToken}` };
   const profile = await request(baseUrl, '/api/users/me', { headers: authorization });
   assert.equal(profile.status, 200);

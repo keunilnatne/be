@@ -100,3 +100,20 @@ test('dashboard returns current frontend fields and compatibility totals', async
     aiOptimizedResults: 9,
   });
 });
+
+test('dashboard returns zeroes instead of demo fallback numbers when the user has no data', async () => {
+  const summary = await dashboardService.getSummary(7, {
+    countMessages: async () => 0,
+    countResults: async () => 0,
+    countRecipients: async () => 0,
+  });
+
+  assert.deepEqual(summary, {
+    sentMessages: 0,
+    aiConversions: 0,
+    recipients: 0,
+    totalMessages: 0,
+    totalRecipients: 0,
+    aiOptimizedResults: 0,
+  });
+});

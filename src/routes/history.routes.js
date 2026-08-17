@@ -4,15 +4,7 @@ const historyController = require('../controllers/history.controller');
 
 const router = Router();
 
-const optionalAuth = (req, res, next) => {
-  if (req.headers.authorization) {
-    return authenticate(req, res, next);
-  }
-  next();
-};
-
-router.get('/', optionalAuth, historyController.list);
-router.get('/:id', optionalAuth, historyController.getOne);
+router.get('/', authenticate, historyController.list);
+router.get('/:id', authenticate, historyController.getOne);
 
 module.exports = router;
-

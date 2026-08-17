@@ -70,6 +70,22 @@ test('history supports sent/converted filters and keyword search', async () => {
   assert.equal(converted[0].id, '1');
 });
 
+test('history returns an empty array instead of sample records when no data exists', async () => {
+  const items = await historyService.list({ userId: 7 }, {
+    findMessages: async () => [],
+  });
+  assert.deepEqual(items, []);
+});
+
+test('missing history detail returns not found instead of a fallback record', async () => {
+  await assert.rejects(
+    historyService.getOne({ userId: 7, id: 999 }, {
+      findResult: async () => null,
+    }),
+    (error) => error.statusCode === 404
+  );
+});
+
 test('history detail is scoped to the authenticated sender', async () => {
   let options;
   const storedMessage = message([]);

@@ -1,17 +1,18 @@
 const env = require('../config/env');
+const ApiError = require('../utils/ApiError');
+
+function aiFailure(statusCode, reason) {
+  return ApiError.aiGenerationFailed(statusCode, reason ? { reason } : undefined);
+}
 
 function ensureAiConfigured() {
   if (!env.ai.apiUrl || !env.ai.apiKey || !env.ai.model) {
-    const error = new Error('AI 서비스 환경변수가 설정되지 않았습니다.');
-    error.statusCode = 503;
-    throw error;
+    throw aiFailure(503, 'AI_NOT_CONFIGURED');
   }
 }
 
 async function callGemini(prompt) {
-  if (!env.ai.apiKey) {
-    return null;
-  }
+  ensureAiConfigured();
 
   const url = `${env.ai.apiUrl}/models/${env.ai.model}:generateContent?key=${env.ai.apiKey}`;
   const controller = new AbortController();
@@ -24,18 +25,31 @@ async function callGemini(prompt) {
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
       signal: controller.signal,
     });
-    const data = await response.json();
+    const rawBody = await response.text();
+    let data = {};
+    try {
+      data = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      if (response.ok) throw aiFailure(502, 'INVALID_PROVIDER_RESPONSE');
+    }
 
     if (!response.ok) {
       console.warn('[Gemini API Notice]:', data?.error?.message || 'API Call failed');
-      return null;
+      if (response.status === 429) throw aiFailure(429, 'RATE_LIMITED');
+      if (response.status === 401 || response.status === 403) {
+        throw aiFailure(503, 'INVALID_API_CREDENTIALS');
+      }
+      throw aiFailure(502, 'PROVIDER_REQUEST_FAILED');
     }
 
     const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('');
-    return text ? text.trim() : null;
+    if (!text?.trim()) throw aiFailure(502, 'EMPTY_PROVIDER_RESPONSE');
+    return text.trim();
   } catch (error) {
     console.warn('[Gemini API Exception]:', error.message);
-    return null;
+    if (error.code === 'AI_GENERATION_FAILED') throw error;
+    if (error.name === 'AbortError') throw aiFailure(504, 'PROVIDER_TIMEOUT');
+    throw aiFailure(502, 'PROVIDER_CONNECTION_FAILED');
   } finally {
     clearTimeout(timeout);
   }
@@ -49,6 +63,14 @@ function parseJsonResponse(raw) {
   } catch {
     return {};
   }
+}
+
+function parseRequiredJson(raw, requiredFields) {
+  const parsed = parseJsonResponse(raw);
+  const valid = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    && requiredFields.every((field) => typeof parsed[field] === 'string' && parsed[field].trim());
+  if (!valid) throw aiFailure(502, 'INVALID_AI_JSON');
+  return parsed;
 }
 
 function clampScore(value, fallback = 0) {
@@ -108,18 +130,9 @@ async function optimizeMessage(input) {
     const { recipients = [], subject = '', body = '', companyDna = null } = input;
     const prompt = buildMultiRecipientPrompt({ recipients, subject, body, companyDna });
     const aiRaw = await callGemini(prompt);
-    let resultSubject = subject;
-    let resultBody = body;
-
-    if (aiRaw) {
-      try {
-        const parsed = parseJsonResponse(aiRaw);
-        if (parsed.optimizedSubject) resultSubject = parsed.optimizedSubject;
-        if (parsed.optimizedBody) resultBody = parsed.optimizedBody;
-      } catch {
-        if (aiRaw.length > 5) resultBody = aiRaw;
-      }
-    }
+    const parsed = parseRequiredJson(aiRaw, ['optimizedSubject', 'optimizedBody']);
+    const resultSubject = parsed.optimizedSubject;
+    const resultBody = parsed.optimizedBody;
 
     const recipientResults = recipients.map((r) => ({
       recipientId: r.id || null,
@@ -151,10 +164,10 @@ async function optimizeMessage(input) {
 [맥락] ${JSON.stringify(input.context || {}, null, 2)}
 JSON만 출력: {"subject":"최적화된 제목","body":"최적화된 본문","qualityScore":92}`;
   const raw = await callGemini(prompt);
-  const parsed = parseJsonResponse(raw);
+  const parsed = parseRequiredJson(raw, ['subject', 'body']);
   return {
-    subject: parsed.subject || input.subject,
-    body: parsed.body || input.body,
+    subject: parsed.subject,
+    body: parsed.body,
     qualityScore: parsed.qualityScore || 90,
   };
 }
@@ -211,6 +224,7 @@ ${sampleText}
 module.exports = {
   callGemini,
   parseJsonResponse,
+  parseRequiredJson,
   optimizeMessage,
   analyzeQuality,
   buildQualityPrompt,

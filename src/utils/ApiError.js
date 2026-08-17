@@ -1,8 +1,9 @@
 class ApiError extends Error {
-  constructor(statusCode, message, details) {
+  constructor(statusCode, message, details, code) {
     super(message);
     this.statusCode = statusCode;
     this.details = details;
+    this.code = code;
   }
 
   static badRequest(message, details) {
@@ -19,6 +20,14 @@ class ApiError extends Error {
 
   static notFound(message = '리소스를 찾을 수 없습니다.') {
     return new ApiError(404, message);
+  }
+  static aiGenerationFailed(statusCode = 502, details) {
+    return new ApiError(
+      statusCode,
+      '메시지 생성에 실패했습니다. 잠시 후 다시 시도해주세요.',
+      details,
+      'AI_GENERATION_FAILED'
+    );
   }
 }
 

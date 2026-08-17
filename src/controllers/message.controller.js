@@ -181,6 +181,13 @@ exports.optimize = async (req, res) => {
     }));
     const firstSuccess = serializedResults.find((result) => result.status === 'converted');
 
+    if (!firstSuccess) {
+      throw ApiError.aiGenerationFailed(502, {
+        reason: 'OPTIMIZATION_FAILED',
+        messageId: message.id,
+      });
+    }
+
     return res.status(201).json({
       messageId: message.id,
       originalSubject: message.originalSubject,

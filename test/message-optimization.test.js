@@ -169,6 +169,9 @@ test('optimize controller accepts frontend recipients and returns results array'
   await messageController.createOptimizeHandler(optimizeMany)(req, res);
   assert.equal(response.statusCode, 201);
   assert.equal(response.payload.results.length, 1);
+  assert.equal(response.payload.messageId, 7);
+  assert.equal(response.payload.messageResultId, 8);
+  assert.equal(response.payload.result.id, 8);
   assert.equal(response.payload.subject, 'Optimized');
   assert.equal(response.payload.body, 'Optimized body');
 });

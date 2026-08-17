@@ -176,5 +176,34 @@ test('send controller returns recipient-level summary', async () => {
     { json(value) { response = value; } }
   );
   assert.equal(response.sentCount, 1);
+  assert.equal(response.messageResultId, 1);
+  assert.equal(response.result.id, 1);
   assert.equal(response.results[0].gmailMessageId, 'gmail-1');
+});
+
+test('send controller accepts the single-result request without an array', async () => {
+  let received;
+  const handler = messageController.createSendHandler(async (input) => {
+    received = input;
+    return {
+      message: { id: 10, status: 'sent' },
+      sentCount: 1,
+      failedCount: 0,
+      outcomes: [{
+        result: result(3, { status: 'sent', finalSubject: 'edited', finalBody: 'edited body' }),
+        gmailMessageId: 'gmail-3',
+        errorMessage: null,
+      }],
+    };
+  });
+
+  let response;
+  await handler(
+    { user: { id: 7 }, body: { messageId: 10, messageResultId: 3, subject: 'edited', body: 'edited body' } },
+    { json(value) { response = value; } }
+  );
+
+  assert.deepEqual(received.results, [{ messageResultId: 3, subject: 'edited', body: 'edited body' }]);
+  assert.equal(response.messageResultId, 3);
+  assert.equal(response.gmailMessageId, 'gmail-3');
 });

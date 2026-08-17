@@ -16,6 +16,18 @@ function requireSingleRecipient(items, fieldName = 'recipients') {
 
 exports.requireSingleRecipient = requireSingleRecipient;
 
+function singleSendResults(body) {
+  if (body.results !== undefined) return body.results;
+  if (body.messageResultId === undefined) return undefined;
+  return [{
+    messageResultId: body.messageResultId,
+    ...(body.subject !== undefined && { subject: body.subject }),
+    ...(body.body !== undefined && { body: body.body }),
+  }];
+}
+
+exports.singleSendResults = singleSendResults;
+
 function createOptimizeHandler(optimizeMany = messageOptimizationService.optimizeMany) {
   return async (req, res) => {
     const subject = String(req.body.subject || '').trim();
@@ -47,24 +59,36 @@ function createOptimizeHandler(optimizeMany = messageOptimizationService.optimiz
       error: result.errorMessage,
     }));
     const first = serialized[0];
+    if (!first || first.status !== 'converted') {
+      throw ApiError.aiGenerationFailed(502, {
+        reason: 'OPTIMIZATION_FAILED',
+        messageId: message.id,
+      });
+    }
     return res.status(201).json({
       messageId: message.id,
+      messageResultId: first.id,
       originalSubject: message.originalSubject,
       originalBody: message.originalBody,
       results: serialized,
       recipientResults: serialized,
       subject: first?.subject || subject,
       body: first?.body || body,
+      result: first,
     });
   };
 }
 
 function createSendHandler(sendMany = messageSendService.sendMany) {
   return async (req, res) => {
+    const messageId = Number(req.body.messageId);
+    if (!Number.isInteger(messageId) || messageId <= 0) {
+      throw ApiError.badRequest('유효한 messageId가 필요합니다.');
+    }
     const sent = await sendMany({
       senderId: req.user.id,
-      messageId: Number(req.body.messageId),
-      results: req.body.results,
+      messageId,
+      results: singleSendResults(req.body),
     });
     if (sent.failedCount > 0) {
       throw ApiError.gmailSendFailed({
@@ -72,8 +96,11 @@ function createSendHandler(sendMany = messageSendService.sendMany) {
         messageId: sent.message.id,
       });
     }
+    const first = sent.outcomes[0];
     return res.json({
       messageId: sent.message.id,
+      messageResultId: first?.result.id ?? null,
+      gmailMessageId: first?.gmailMessageId ?? null,
       status: sent.message.status,
       sentCount: sent.sentCount,
       failedCount: sent.failedCount,
@@ -88,6 +115,17 @@ function createSendHandler(sendMany = messageSendService.sendMany) {
         gmailMessageId,
         error: errorMessage,
       })),
+      result: first ? {
+        id: first.result.id,
+        recipientId: first.result.recipientId,
+        recipientEmail: first.result.recipientEmail,
+        subject: first.result.finalSubject,
+        body: first.result.finalBody,
+        status: first.result.status,
+        sentAt: first.result.sentAt,
+        gmailMessageId: first.gmailMessageId,
+        error: first.errorMessage,
+      } : null,
     });
   };
 }
@@ -152,12 +190,15 @@ exports.optimize = async (req, res) => {
     });
 
     return res.json({
+      messageId: null,
+      messageResultId: null,
       subject: optimized.subject,
       body: optimized.body,
       originalSubject: subject,
       originalBody: body,
       results: optimized.recipientResults,
       recipientResults: optimized.recipientResults,
+      result: optimized.recipientResults[0] || null,
     });
   }
 
@@ -196,12 +237,14 @@ exports.optimize = async (req, res) => {
 
     return res.status(201).json({
       messageId: message.id,
+      messageResultId: firstSuccess.id,
       originalSubject: message.originalSubject,
       originalBody: message.originalBody,
       results: serializedResults,
       recipientResults: serializedResults,
       subject: firstSuccess?.subject || subject,
       body: firstSuccess?.body || body,
+      result: firstSuccess,
     });
   }
 
@@ -211,15 +254,20 @@ exports.optimize = async (req, res) => {
 
 // POST /api/messages/send - 메시지 DB 저장 및 Gmail 실제 발송
 exports.send = async (req, res) => {
-  const { recipients, subject, body, originalSubject, originalBody, messageId, results: inputResults } = req.body;
+  const { recipients, subject, body, originalSubject, originalBody, messageId } = req.body;
+  const inputResults = singleSendResults(req.body);
 
   if (messageId && req.user?.id) {
+    const parsedMessageId = Number(messageId);
+    if (!Number.isInteger(parsedMessageId) || parsedMessageId <= 0) {
+      throw ApiError.badRequest('유효한 messageId가 필요합니다.');
+    }
     if (inputResults !== undefined) {
       requireSingleRecipient(inputResults, 'results');
     }
     const sent = await messageSendService.sendMany({
       senderId: req.user.id,
-      messageId,
+      messageId: parsedMessageId,
       results: inputResults,
     });
     if (sent.failedCount > 0) {
@@ -228,8 +276,11 @@ exports.send = async (req, res) => {
         messageId: sent.message.id,
       });
     }
+    const first = sent.outcomes[0];
     return res.json({
       messageId: sent.message.id,
+      messageResultId: first?.result.id ?? null,
+      gmailMessageId: first?.gmailMessageId ?? null,
       status: sent.message.status,
       sentCount: sent.sentCount,
       failedCount: sent.failedCount,
@@ -244,6 +295,17 @@ exports.send = async (req, res) => {
         gmailMessageId,
         error: errorMessage,
       })),
+      result: first ? {
+        id: first.result.id,
+        recipientId: first.result.recipientId,
+        recipientEmail: first.result.recipientEmail,
+        subject: first.result.finalSubject,
+        body: first.result.finalBody,
+        status: first.result.status,
+        sentAt: first.result.sentAt,
+        gmailMessageId: first.gmailMessageId,
+        error: first.errorMessage,
+      } : null,
     });
   }
 
@@ -331,8 +393,11 @@ exports.send = async (req, res) => {
 
   res.status(201).json({
     messageId: messageRecord.id,
+    messageResultId: results[0]?.id ?? null,
+    gmailMessageId: results[0]?.getDataValue?.('gmailMessageId') ?? null,
     status: messageRecord.status,
     results,
+    result: results[0] || null,
   });
 };
 

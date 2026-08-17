@@ -16,18 +16,57 @@ function encodeHeader(value) {
   return `=?UTF-8?B?${Buffer.from(value).toString('base64')}?=`;
 }
 
-function createRawMessage({ to, subject, body }) {
+function createRawMessage({ to, subject, body, attachments = [] }) {
   const normalizedBody = String(body || '').replace(/\r?\n/g, '\r\n');
-  const message = [
+
+  if (!attachments || attachments.length === 0) {
+    const message = [
+      `To: ${to}`,
+      `Subject: ${encodeHeader(subject)}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      Buffer.from(normalizedBody).toString('base64'),
+    ].join('\r\n');
+    return base64Url(message);
+  }
+
+  const boundary = `__boundary_${Date.now()}_${Math.random().toString(36).slice(2)}__`;
+  const messageParts = [
     `To: ${to}`,
     `Subject: ${encodeHeader(subject)}`,
     'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
     'Content-Type: text/plain; charset=UTF-8',
     'Content-Transfer-Encoding: base64',
     '',
     Buffer.from(normalizedBody).toString('base64'),
-  ].join('\r\n');
-  return base64Url(message);
+  ];
+
+  for (const file of attachments) {
+    const filename = file.name || file.filename || 'attachment';
+    const contentType = file.type || file.contentType || 'application/octet-stream';
+    let base64Data = file.data || file.content || '';
+    if (base64Data.includes(',')) {
+      base64Data = base64Data.split(',')[1];
+    }
+
+    messageParts.push(
+      '',
+      `--${boundary}`,
+      `Content-Type: ${contentType}; name="${encodeHeader(filename)}"`,
+      `Content-Disposition: attachment; filename="${encodeHeader(filename)}"`,
+      'Content-Transfer-Encoding: base64',
+      '',
+      base64Data
+    );
+  }
+
+  messageParts.push('', `--${boundary}--`, '');
+  return base64Url(messageParts.join('\r\n'));
 }
 
 function extractPlainTextBody(payload) {
@@ -116,17 +155,17 @@ async function getAccessToken(userId) {
   return payload.access_token;
 }
 
-// Polymorphic sendMessage supporting both sendMessage(userId, {to, subject, body}) and sendMessage({accessToken, to, subject, body})
+// Polymorphic sendMessage supporting both sendMessage(userId, {to, subject, body, attachments}) and sendMessage({accessToken, to, subject, body, attachments})
 async function sendMessage(arg1, arg2) {
   if (typeof arg1 === 'object' && arg1.accessToken) {
-    const { accessToken, to, subject, body } = arg1;
+    const { accessToken, to, subject, body, attachments } = arg1;
     const response = await fetch(SEND_URL, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${accessToken}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ raw: createRawMessage({ to, subject, body }) }),
+      body: JSON.stringify({ raw: createRawMessage({ to, subject, body, attachments }) }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -140,12 +179,12 @@ async function sendMessage(arg1, arg2) {
   }
 
   const userId = arg1;
-  const { to, subject, body } = arg2 || {};
+  const { to, subject, body, attachments } = arg2 || {};
   try {
     const auth = await googleAuthService.getAuthorizedClientForUser(userId);
     const gmail = google.gmail({ version: 'v1', auth });
 
-    const raw = createRawMessage({ to, subject, body });
+    const raw = createRawMessage({ to, subject, body, attachments });
     const { data } = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
     if (!data?.id) throw ApiError.gmailSendFailed({ reason: 'MISSING_GMAIL_MESSAGE_ID' });
     return data;

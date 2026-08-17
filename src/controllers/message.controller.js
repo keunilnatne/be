@@ -18,9 +18,19 @@ exports.requireSingleRecipient = requireSingleRecipient;
 
 function singleSendResults(body) {
   if (body.results !== undefined) return body.results;
-  if (body.messageResultId === undefined) return undefined;
+  if (body.messageResultId === undefined) {
+    if (body.attachments) {
+      return [{
+        attachments: body.attachments,
+        ...(body.subject !== undefined && { subject: body.subject }),
+        ...(body.body !== undefined && { body: body.body }),
+      }];
+    }
+    return undefined;
+  }
   return [{
     messageResultId: body.messageResultId,
+    ...(body.attachments !== undefined && { attachments: body.attachments }),
     ...(body.subject !== undefined && { subject: body.subject }),
     ...(body.body !== undefined && { body: body.body }),
   }];
@@ -120,6 +130,7 @@ function createSendHandler(sendMany = messageSendService.sendMany) {
         messageResultId: messageResult.id,
         subject,
         body,
+        attachments: req.body.attachments || [],
       }];
     }
 

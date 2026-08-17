@@ -95,6 +95,7 @@ async function sendMany({ senderId, messageId, results }, dependencies = {}) {
         to: recipientEmail,
         subject,
         body,
+        attachments: override.attachments || [],
       });
       if (!sent?.id) throw ApiError.gmailSendFailed({ reason: 'MISSING_GMAIL_MESSAGE_ID' });
       await result.update({

@@ -215,4 +215,41 @@ exports.deleteMe = async (req, res) => {
   res.json({ message: '계정이 성공적으로 삭제되었습니다.' });
 };
 
+// GET /api/users/lookup?email=...
+exports.lookupByEmail = async (req, res) => {
+  const email = String(req.query.email || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw ApiError.badRequest('유효한 이메일 주소를 입력해 주세요.');
+  }
+
+  const user = await User.findOne({
+    where: { email },
+    include: [Company],
+  });
+  if (!user) {
+    throw ApiError.notFound('이음에 가입된 회원을 찾을 수 없습니다.', 'IEUM_USER_NOT_FOUND');
+  }
+
+  const commStyle = Array.isArray(user.communicationPreferences) && user.communicationPreferences.length
+    ? user.communicationPreferences
+    : (user.preferredStyle ? [user.preferredStyle] : ['명확하고 간결하게']);
+
+  res.json({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    jobRole: user.jobRole || user.position || user.jobTitle || '',
+    role: user.jobRole || user.position || user.jobTitle || '',
+    position: user.position || user.jobTitle || user.jobRole || '',
+    company: user.companyName || (user.Company ? user.Company.name : ''),
+    country: 'South Korea',
+    language: user.defaultLanguage || 'Korean',
+    timezone: user.timezone || 'Asia/Seoul',
+    organizationRelation: '팀원',
+    communicationStyle: commStyle,
+    preferredStyle: user.preferredStyle || '',
+    isIeumUser: true,
+  });
+};
+
 

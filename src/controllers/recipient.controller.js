@@ -186,15 +186,7 @@ exports.getByEmail = async (req, res) => {
     throw ApiError.badRequest('유효한 이메일 주소를 입력해 주세요.');
   }
 
-  // 1. 이미 등록된 수신자가 있는지 확인
-  const recipient = await Recipient.findOne({
-    where: { ...ownedRecipientWhere(req.user.id), email },
-  });
-  if (recipient) {
-    return res.json(await serializeRecipient(recipient));
-  }
-
-  // 2. 이음에 가입된 회원(User) 프로필이 있는지 확인
+  // 1. 이음에 가입된 회원(User 디비) 프로필 조회 우선
   const user = await User.findOne({ where: { email } });
   if (user) {
     const commStyle = Array.isArray(user.communicationPreferences) && user.communicationPreferences.length
@@ -224,8 +216,17 @@ exports.getByEmail = async (req, res) => {
       fullTime: true,
       avatar: user.name?.slice(0, 1) || '?',
       communicationStyle: commStyle,
+      preferredStyle: user.preferredStyle || '',
       isIeumUser: true,
     });
+  }
+
+  // 2. 기존 수신자 디비 확인
+  const recipient = await Recipient.findOne({
+    where: { ...ownedRecipientWhere(req.user.id), email },
+  });
+  if (recipient) {
+    return res.json(await serializeRecipient(recipient));
   }
 
   throw ApiError.notFound('등록된 이메일 정보를 찾을 수 없습니다.', 'RECIPIENT_EMAIL_NOT_FOUND');

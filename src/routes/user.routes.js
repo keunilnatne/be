@@ -12,6 +12,7 @@ router.delete('/me', authMiddleware, userController.deleteMe);
 router.get('/me/ai-settings', authMiddleware, userController.getAiSettings);
 router.put('/me/ai-settings', authMiddleware, userController.updateAiSettings);
 router.post('/me/reset-personalization', authMiddleware, userController.resetPersonalization);
+router.get('/lookup', authMiddleware, userController.lookupByEmail);
 
 router.get('/', userController.list);
 router.post('/', userController.create);

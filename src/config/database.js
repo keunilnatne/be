@@ -18,9 +18,6 @@ const sequelize = new Sequelize(env.db.name, env.db.user, env.db.password, {
   },
   dialectOptions: {
     connectTimeout: 60000,
-    ssl: {
-      rejectUnauthorized: false,
-    },
   },
 });
 

@@ -11,6 +11,7 @@ const gmailIntegrationRoutes = require('./gmailIntegration.routes');
 const teamMemoryRoutes = require('./teamMemory.routes');
 const historyRoutes = require('./history.routes');
 const dashboardRoutes = require('./dashboard.routes');
+const conversationRoutes = require('./conversation.routes');
 
 const router = Router();
 
@@ -27,6 +28,7 @@ router.use('/recipients', recipientRoutes);
 
 // FS-004~007: 메시지 생성, 분석 및 변환
 router.use('/messages', messageRoutes);
+router.use('/conversations', conversationRoutes);
 
 // 직무, 문체, 조직 특성 태그 마스터
 router.use('/tags', tagRoutes);

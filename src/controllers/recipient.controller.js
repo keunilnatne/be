@@ -1,4 +1,4 @@
-const { Recipient } = require('../models');
+const { Recipient, User } = require('../models');
 const { Op } = require('sequelize');
 const tagService = require('../services/tagService');
 const ApiError = require('../utils/ApiError');
@@ -186,13 +186,49 @@ exports.getByEmail = async (req, res) => {
     throw ApiError.badRequest('유효한 이메일 주소를 입력해 주세요.');
   }
 
+  // 1. 이미 등록된 수신자가 있는지 확인
   const recipient = await Recipient.findOne({
     where: { ...ownedRecipientWhere(req.user.id), email },
   });
-  if (!recipient) {
-    throw ApiError.notFound('등록된 수신자 이메일을 찾을 수 없습니다.', 'RECIPIENT_EMAIL_NOT_FOUND');
+  if (recipient) {
+    return res.json(await serializeRecipient(recipient));
   }
-  res.json(await serializeRecipient(recipient));
+
+  // 2. 이음에 가입된 회원(User) 프로필이 있는지 확인
+  const user = await User.findOne({ where: { email } });
+  if (user) {
+    const commStyle = Array.isArray(user.communicationPreferences) && user.communicationPreferences.length
+      ? user.communicationPreferences
+      : (user.preferredStyle ? [user.preferredStyle] : ['명확하고 간결하게']);
+
+    return res.json({
+      id: null,
+      name: user.name,
+      email: user.email,
+      jobRole: user.jobRole || user.position || user.jobTitle || '',
+      role: user.jobRole || user.position || user.jobTitle || '',
+      position: user.position || user.jobTitle || user.jobRole || '',
+      company: user.companyName || '',
+      country: 'South Korea',
+      language: user.defaultLanguage || 'Korean',
+      timezone: user.timezone || 'Asia/Seoul',
+      relationship: '팀원',
+      organizationRelation: '팀원',
+      responseSpeed: '보통',
+      averageResponseMinutes: 15,
+      collaborationActivity: 'High',
+      isOnline: true,
+      isFavorite: false,
+      isRecent: true,
+      verifiedExpert: false,
+      fullTime: true,
+      avatar: user.name?.slice(0, 1) || '?',
+      communicationStyle: commStyle,
+      isIeumUser: true,
+    });
+  }
+
+  throw ApiError.notFound('등록된 이메일 정보를 찾을 수 없습니다.', 'RECIPIENT_EMAIL_NOT_FOUND');
 };
 
 exports.create = async (req, res) => {
@@ -219,6 +255,8 @@ exports.create = async (req, res) => {
     avatar,
     memo,
     communicationStyle,
+    preferredStyle,
+    customStyle,
     tagIds,
   } = req.body;
 
@@ -237,6 +275,12 @@ exports.create = async (req, res) => {
   if (duplicate) {
     throw new ApiError(409, '이미 등록된 수신자 이메일입니다.', null, 'RECIPIENT_EMAIL_ALREADY_EXISTS');
   }
+
+  const finalStyle = Array.isArray(communicationStyle)
+    ? communicationStyle
+    : (typeof communicationStyle === 'string' && communicationStyle.trim()
+      ? [communicationStyle.trim()]
+      : (preferredStyle || customStyle ? [preferredStyle || customStyle] : ['명확한 표현 선호']));
 
   const recipient = await Recipient.create({
     ownerUserId: req.user.id,
@@ -258,7 +302,7 @@ exports.create = async (req, res) => {
     fullTime,
     avatar,
     memo,
-    communicationStyle,
+    communicationStyle: finalStyle,
   });
 
   if (Array.isArray(tagIds) && tagIds.length) {

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const gmailService = require('../src/services/gmailService');
 const messageSendService = require('../src/services/messageSendService');
 const messageController = require('../src/controllers/message.controller');
+const ApiError = require('../src/utils/ApiError');
 
 function result(id, values = {}) {
   return {
@@ -64,6 +65,40 @@ test('sendMany sends one recipient and stores final edits', async () => {
   assert.equal(first.status, 'sent');
   assert.equal(sent.sentCount, 1);
   assert.equal(storedMessage.status, 'sent');
+});
+
+test('sendMany does not mark a result sent without a Gmail message id', async () => {
+  const first = result(1);
+  const storedMessage = message([first]);
+  const sent = await messageSendService.sendMany({ senderId: 7, messageId: 10 }, {
+    findMessage: async () => storedMessage,
+    getAccessToken: async () => 'access-token',
+    sendMessage: async () => ({}),
+  });
+
+  assert.equal(sent.sentCount, 0);
+  assert.equal(sent.failedCount, 1);
+  assert.equal(first.status, 'failed');
+  assert.equal(first.sentAt, null);
+  assert.equal(storedMessage.status, 'partially_failed');
+});
+
+test('disconnected Gmail account marks the selected result failed', async () => {
+  const first = result(1);
+  const storedMessage = message([first]);
+  const disconnected = ApiError.gmailNotConnected();
+
+  await assert.rejects(
+    messageSendService.sendMany({ senderId: 7, messageId: 10 }, {
+      findMessage: async () => storedMessage,
+      getAccessToken: async () => { throw disconnected; },
+    }),
+    (error) => error.code === 'GMAIL_NOT_CONNECTED'
+  );
+
+  assert.equal(first.status, 'failed');
+  assert.equal(first.sentAt, null);
+  assert.equal(storedMessage.status, 'partially_failed');
 });
 
 test('sendMany rejects an old message with multiple unselected recipients', async () => {

@@ -66,6 +66,12 @@ function createSendHandler(sendMany = messageSendService.sendMany) {
       messageId: Number(req.body.messageId),
       results: req.body.results,
     });
+    if (sent.failedCount > 0) {
+      throw ApiError.gmailSendFailed({
+        reason: 'SEND_RESULT_FAILED',
+        messageId: sent.message.id,
+      });
+    }
     return res.json({
       messageId: sent.message.id,
       status: sent.message.status,
@@ -205,7 +211,7 @@ exports.optimize = async (req, res) => {
 
 // POST /api/messages/send - 메시지 DB 저장 및 Gmail 실제 발송
 exports.send = async (req, res) => {
-  const { recipients, subject, body, originalSubject, originalBody, userId, messageId, results: inputResults } = req.body;
+  const { recipients, subject, body, originalSubject, originalBody, messageId, results: inputResults } = req.body;
 
   if (messageId && req.user?.id) {
     if (inputResults !== undefined) {
@@ -216,6 +222,12 @@ exports.send = async (req, res) => {
       messageId,
       results: inputResults,
     });
+    if (sent.failedCount > 0) {
+      throw ApiError.gmailSendFailed({
+        reason: 'SEND_RESULT_FAILED',
+        messageId: sent.message.id,
+      });
+    }
     return res.json({
       messageId: sent.message.id,
       status: sent.message.status,
@@ -239,7 +251,10 @@ exports.send = async (req, res) => {
     throw ApiError.badRequest('subject와 body는 필수입니다.');
   }
 
-  const senderId = req.user?.id || (userId ? parseInt(userId, 10) : 1);
+  if (!req.user?.id) {
+    throw ApiError.unauthorized('Gmail 발송에는 로그인이 필요합니다.');
+  }
+  const senderId = req.user.id;
   const recipientList = Array.isArray(recipients) ? recipients : [];
   requireSingleRecipient(recipientList);
 
@@ -249,25 +264,34 @@ exports.send = async (req, res) => {
     originalSubject: originalSubject || subject,
     originalBody: originalBody || body,
     purpose: '업무 관련 메시지',
-    status: 'sent',
+    status: 'optimized',
   });
 
   // 2. 수신자별 MessageResult 저장 및 Gmail 발송 시도
   const results = [];
   for (const r of recipientList) {
-    let resultStatus = 'sent';
-    let errorMessage = null;
+    let resultStatus = 'failed';
+    let errorMessage = '유효한 수신자 이메일이 필요합니다.';
+    let sentAt = null;
+    let gmailMessageId = null;
+    let sendError = null;
 
-    if (r.email && userId) {
+    if (r.email) {
       try {
-        await gmailService.sendMessage(userId, {
+        const sent = await gmailService.sendMessage(senderId, {
           to: r.email,
           subject,
           body,
         });
+        if (!sent?.id) throw ApiError.gmailSendFailed({ reason: 'MISSING_GMAIL_MESSAGE_ID' });
+        resultStatus = 'sent';
+        errorMessage = null;
+        sentAt = new Date();
+        gmailMessageId = sent.id;
       } catch (err) {
         console.warn(`[Gmail Send Warning for ${r.email}]:`, err.message);
-        resultStatus = 'sent';
+        sendError = err;
+        errorMessage = err.message;
       }
     }
 
@@ -288,15 +312,26 @@ exports.send = async (req, res) => {
       },
       qualityScore: 92,
       status: resultStatus,
-      sentAt: new Date(),
+      sentAt,
       errorMessage,
     });
     results.push(resRecord);
+
+    await messageRecord.update({ status: resultStatus === 'sent' ? 'sent' : 'partially_failed' });
+    if (resultStatus !== 'sent') {
+      if (sendError?.code === 'GMAIL_NOT_CONNECTED') throw sendError;
+      throw ApiError.gmailSendFailed({
+        reason: sendError ? 'GMAIL_API_FAILED' : 'INVALID_RECIPIENT_EMAIL',
+        messageId: messageRecord.id,
+      });
+    }
+
+    resRecord.setDataValue?.('gmailMessageId', gmailMessageId);
   }
 
   res.status(201).json({
     messageId: messageRecord.id,
-    status: 'sent',
+    status: messageRecord.status,
     results,
   });
 };

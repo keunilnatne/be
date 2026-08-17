@@ -96,7 +96,7 @@ async function getMessage(userId, messageId) {
 async function getAccessToken(userId) {
   const integration = await GmailIntegration.findOne({ where: { userId } });
   if (!integration) {
-    throw ApiError.badRequest('Gmail 계정이 연결되어 있지 않습니다.');
+    throw ApiError.gmailNotConnected();
   }
 
   const response = await fetch(TOKEN_URL, {
@@ -111,7 +111,7 @@ async function getAccessToken(userId) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload.access_token) {
-    throw ApiError.badRequest('Gmail 인증이 만료되었습니다. 계정을 다시 연결해 주세요.', payload);
+    throw ApiError.gmailNotConnected({ reason: 'TOKEN_REFRESH_FAILED' });
   }
   return payload.access_token;
 }
@@ -130,21 +130,30 @@ async function sendMessage(arg1, arg2) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(payload.error?.message || 'Gmail 발송에 실패했습니다.');
-      error.statusCode = response.status;
-      throw error;
+      throw ApiError.gmailSendFailed({
+        reason: 'GMAIL_API_REJECTED',
+        providerStatus: response.status,
+      });
     }
+    if (!payload.id) throw ApiError.gmailSendFailed({ reason: 'MISSING_GMAIL_MESSAGE_ID' });
     return payload;
   }
 
   const userId = arg1;
   const { to, subject, body } = arg2 || {};
-  const auth = await googleAuthService.getAuthorizedClientForUser(userId);
-  const gmail = google.gmail({ version: 'v1', auth });
+  try {
+    const auth = await googleAuthService.getAuthorizedClientForUser(userId);
+    const gmail = google.gmail({ version: 'v1', auth });
 
-  const raw = createRawMessage({ to, subject, body });
-  const { data } = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
-  return data;
+    const raw = createRawMessage({ to, subject, body });
+    const { data } = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
+    if (!data?.id) throw ApiError.gmailSendFailed({ reason: 'MISSING_GMAIL_MESSAGE_ID' });
+    return data;
+  } catch (error) {
+    if (error.code === 'GMAIL_NOT_CONNECTED' || error.code === 'GMAIL_SEND_FAILED') throw error;
+    if (error.statusCode === 404) throw ApiError.gmailNotConnected();
+    throw ApiError.gmailSendFailed({ reason: 'GMAIL_API_FAILED' });
+  }
 }
 
 module.exports = {
@@ -154,4 +163,3 @@ module.exports = {
   listMessages,
   getMessage,
 };
-

@@ -29,6 +29,24 @@ class ApiError extends Error {
       'AI_GENERATION_FAILED'
     );
   }
+
+  static gmailNotConnected(details) {
+    return new ApiError(
+      409,
+      'Gmail 계정이 연결되어 있지 않습니다.',
+      details,
+      'GMAIL_NOT_CONNECTED'
+    );
+  }
+
+  static gmailSendFailed(details) {
+    return new ApiError(
+      502,
+      'Gmail 전송에 실패했습니다. 잠시 후 다시 시도해주세요.',
+      details,
+      'GMAIL_SEND_FAILED'
+    );
+  }
 }
 
 module.exports = ApiError;

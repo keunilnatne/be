@@ -53,7 +53,21 @@ async function sendMany({ senderId, messageId, results }, dependencies = {}) {
     throw ApiError.badRequest('선택한 결과가 메시지에 속하지 않거나 이미 발송되었습니다.');
   }
 
-  const accessToken = await getAccessToken(senderId);
+  let accessToken;
+  try {
+    accessToken = await getAccessToken(senderId);
+  } catch (error) {
+    const failure = error.code === 'GMAIL_NOT_CONNECTED'
+      ? error
+      : ApiError.gmailNotConnected({ reason: 'TOKEN_ACQUISITION_FAILED' });
+    await Promise.all(candidates.map((result) => result.update({
+      status: 'failed',
+      sentAt: null,
+      errorMessage: failure.message,
+    })));
+    await message.update({ status: 'partially_failed' });
+    throw failure;
+  }
   const outcomes = [];
   for (const result of candidates) {
     const override = overrides.get(Number(result.id)) || {};
@@ -82,6 +96,7 @@ async function sendMany({ senderId, messageId, results }, dependencies = {}) {
         subject,
         body,
       });
+      if (!sent?.id) throw ApiError.gmailSendFailed({ reason: 'MISSING_GMAIL_MESSAGE_ID' });
       await result.update({
         finalSubject: subject,
         finalBody: body,
@@ -89,7 +104,7 @@ async function sendMany({ senderId, messageId, results }, dependencies = {}) {
         sentAt: new Date(),
         errorMessage: null,
       });
-      outcomes.push({ result, gmailMessageId: sent.id || null, errorMessage: null });
+      outcomes.push({ result, gmailMessageId: sent.id, errorMessage: null });
     } catch (error) {
       await result.update({
         finalSubject: subject,

@@ -81,10 +81,48 @@ function createOptimizeHandler(optimizeMany = messageOptimizationService.optimiz
 
 function createSendHandler(sendMany = messageSendService.sendMany) {
   return async (req, res) => {
-    const messageId = Number(req.body.messageId);
+    let messageId = Number(req.body.messageId);
+
+    // messageId가 없지만 발송 정보(recipients, subject, body)가 전달된 경우 자동 메시지 레코드 생성 지원
     if (!Number.isInteger(messageId) || messageId <= 0) {
-      throw ApiError.badRequest('유효한 messageId가 필요합니다.');
+      const subject = String(req.body.subject || req.body.originalSubject || '').trim();
+      const body = String(req.body.body || req.body.originalBody || '').trim();
+      const rawRecipients = req.body.recipients || req.body.recipientIds;
+      if (!subject || !body || !rawRecipients) {
+        throw ApiError.badRequest('유효한 messageId 또는 발송 정보(recipients, subject, body)가 필요합니다.');
+      }
+      const rawRecipient = Array.isArray(rawRecipients) ? rawRecipients[0] : rawRecipients;
+      const recipientId = Number(rawRecipient?.id ?? rawRecipient);
+      const recipientEmail = rawRecipient?.email || '';
+      const recipientName = rawRecipient?.name || '';
+
+      const message = await Message.create({
+        senderId: req.user.id,
+        originalSubject: req.body.originalSubject || subject,
+        originalBody: req.body.originalBody || body,
+        status: 'draft',
+      });
+      messageId = message.id;
+
+      const messageResult = await MessageResult.create({
+        messageId: message.id,
+        recipientId: Number.isInteger(recipientId) && recipientId > 0 ? recipientId : null,
+        recipientName,
+        recipientEmail,
+        optimizedSubject: subject,
+        optimizedBody: body,
+        finalSubject: subject,
+        finalBody: body,
+        status: 'converted',
+      });
+
+      req.body.results = [{
+        messageResultId: messageResult.id,
+        subject,
+        body,
+      }];
     }
+
     const sent = await sendMany({
       senderId: req.user.id,
       messageId,

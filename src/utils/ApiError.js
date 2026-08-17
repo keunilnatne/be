@@ -1,25 +1,44 @@
+const DEFAULT_CODES = {
+  400: 'VALIDATION_ERROR',
+  401: 'AUTHENTICATION_REQUIRED',
+  403: 'ACCESS_DENIED',
+  404: 'RESOURCE_NOT_FOUND',
+  409: 'CONFLICT',
+  429: 'RATE_LIMITED',
+  500: 'INTERNAL_SERVER_ERROR',
+  502: 'UPSTREAM_SERVICE_ERROR',
+  503: 'SERVICE_UNAVAILABLE',
+  504: 'UPSTREAM_TIMEOUT',
+};
+
 class ApiError extends Error {
   constructor(statusCode, message, details, code) {
     super(message);
     this.statusCode = statusCode;
-    this.details = details;
-    this.code = code;
+    this.details = details ?? null;
+    this.code = code || ApiError.codeForStatus(statusCode);
   }
 
-  static badRequest(message, details) {
-    return new ApiError(400, message, details);
+  static codeForStatus(statusCode) {
+    return DEFAULT_CODES[statusCode] || (statusCode >= 500
+      ? 'INTERNAL_SERVER_ERROR'
+      : 'REQUEST_FAILED');
   }
 
-  static unauthorized(message = '인증이 필요합니다.') {
-    return new ApiError(401, message);
+  static badRequest(message, details, code = 'VALIDATION_ERROR') {
+    return new ApiError(400, message, details, code);
   }
 
-  static forbidden(message = '접근 권한이 없습니다.') {
-    return new ApiError(403, message);
+  static unauthorized(message = '인증이 필요합니다.', code = 'AUTHENTICATION_REQUIRED') {
+    return new ApiError(401, message, null, code);
   }
 
-  static notFound(message = '리소스를 찾을 수 없습니다.') {
-    return new ApiError(404, message);
+  static forbidden(message = '접근 권한이 없습니다.', code = 'ACCESS_DENIED') {
+    return new ApiError(403, message, null, code);
+  }
+
+  static notFound(message = '리소스를 찾을 수 없습니다.', code = 'RESOURCE_NOT_FOUND') {
+    return new ApiError(404, message, null, code);
   }
   static aiGenerationFailed(statusCode = 502, details) {
     return new ApiError(

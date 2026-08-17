@@ -83,6 +83,20 @@ function extractPlainTextBody(payload) {
   return '';
 }
 
+function extractHtmlBody(payload) {
+  if (!payload) return '';
+  if (payload.mimeType === 'text/html' && payload.body?.data) {
+    return Buffer.from(payload.body.data, 'base64').toString('utf-8');
+  }
+  if (payload.parts) {
+    for (const part of payload.parts) {
+      const html = extractHtmlBody(part);
+      if (html) return html;
+    }
+  }
+  return '';
+}
+
 function headerMap(headers = []) {
   return Object.fromEntries(headers.map((h) => [h.name, h.value]));
 }
@@ -121,6 +135,8 @@ async function getMessage(userId, messageId) {
 
   const { data } = await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'full' });
   const headers = headerMap(data.payload?.headers);
+  const plainBody = extractPlainTextBody(data.payload);
+  const htmlBody = extractHtmlBody(data.payload);
 
   return {
     id: data.id,
@@ -128,7 +144,8 @@ async function getMessage(userId, messageId) {
     subject: headers.Subject || '(제목 없음)',
     from: headers.From || '',
     date: headers.Date || '',
-    body: extractPlainTextBody(data.payload) || data.snippet || '',
+    body: plainBody || data.snippet || '',
+    htmlBody: htmlBody || '',
   };
 }
 

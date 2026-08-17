@@ -23,16 +23,37 @@ function encrypt(value) {
 }
 
 function decrypt(payload) {
-  const [version, iv, tag, encrypted] = String(payload || '').split(':');
-  if (version !== VERSION || !iv || !tag || !encrypted) {
-    throw new Error('Invalid encrypted token format.');
+  if (!payload) throw new Error('Invalid encrypted token format.');
+  const raw = String(payload).trim();
+
+  // 1. JSON 포맷인 경우 (accessToken, refreshToken 포함)
+  if (raw.startsWith('{') && raw.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed.refreshToken) return parsed.refreshToken;
+      if (parsed.accessToken) return parsed.accessToken;
+    } catch {
+      // continue
+    }
   }
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key(), Buffer.from(iv, 'base64url'));
-  decipher.setAuthTag(Buffer.from(tag, 'base64url'));
-  return Buffer.concat([
-    decipher.update(Buffer.from(encrypted, 'base64url')),
-    decipher.final(),
-  ]).toString('utf8');
+
+  // 2. AES-256-GCM 암호화 포맷인 경우 (v1:iv:tag:encrypted)
+  const [version, iv, tag, encrypted] = raw.split(':');
+  if (version === VERSION && iv && tag && encrypted) {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key(), Buffer.from(iv, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(encrypted, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8');
+  }
+
+  // 3. 이미 평문 토큰인 경우 (1//... 또는 ya29...)
+  if (raw.startsWith('1//') || raw.startsWith('ya29.')) {
+    return raw;
+  }
+
+  throw new Error('Invalid encrypted token format.');
 }
 
 module.exports = { encrypt, decrypt };

@@ -8,6 +8,7 @@ router.use(authenticate);
 
 router.get('/', recipientController.list);
 router.post('/', recipientController.create);
+router.get('/email-lookup', recipientController.getByEmail);
 router.get('/:recipientId', recipientController.getOne);
 router.put('/:recipientId', recipientController.update);
 router.patch('/:recipientId/favorite', recipientController.toggleFavorite);

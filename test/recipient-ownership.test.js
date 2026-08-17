@@ -18,3 +18,10 @@ test('the client cannot override recipient ownership through filter construction
   assert.equal(where.ownerUserId, 7);
   assert.notEqual(where.ownerUserId, 8);
 });
+
+test('recipient email is normalized before database lookup and storage', () => {
+  assert.equal(
+    recipientController.normalizeRecipientEmail('  QA.User@Example.COM  '),
+    'qa.user@example.com'
+  );
+});

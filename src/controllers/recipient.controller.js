@@ -121,6 +121,12 @@ function ownedRecipientWhere(userId, recipientId) {
 
 exports.ownedRecipientWhere = ownedRecipientWhere;
 
+function normalizeRecipientEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+exports.normalizeRecipientEmail = normalizeRecipientEmail;
+
 async function serializeRecipient(recipient) {
   const tags = await tagService.getTagsForEntity('recipient', recipient.id);
   return {
@@ -174,6 +180,21 @@ exports.list = async (req, res) => {
   res.json(await Promise.all(recipients.map(serializeRecipient)));
 };
 
+exports.getByEmail = async (req, res) => {
+  const email = normalizeRecipientEmail(req.query.email);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw ApiError.badRequest('유효한 이메일 주소를 입력해 주세요.');
+  }
+
+  const recipient = await Recipient.findOne({
+    where: { ...ownedRecipientWhere(req.user.id), email },
+  });
+  if (!recipient) {
+    throw ApiError.notFound('등록된 수신자 이메일을 찾을 수 없습니다.', 'RECIPIENT_EMAIL_NOT_FOUND');
+  }
+  res.json(await serializeRecipient(recipient));
+};
+
 exports.create = async (req, res) => {
   const {
     name,
@@ -205,10 +226,22 @@ exports.create = async (req, res) => {
     throw ApiError.badRequest('name은 필수입니다.');
   }
 
+  const normalizedEmail = normalizeRecipientEmail(email);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    throw ApiError.badRequest('유효한 이메일 주소를 입력해 주세요.');
+  }
+
+  const duplicate = await Recipient.findOne({
+    where: { ...ownedRecipientWhere(req.user.id), email: normalizedEmail },
+  });
+  if (duplicate) {
+    throw new ApiError(409, '이미 등록된 수신자 이메일입니다.', null, 'RECIPIENT_EMAIL_ALREADY_EXISTS');
+  }
+
   const recipient = await Recipient.create({
     ownerUserId: req.user.id,
     name,
-    email,
+    email: normalizedEmail,
     jobRole: jobRole || role || position || '',
     company,
     country,

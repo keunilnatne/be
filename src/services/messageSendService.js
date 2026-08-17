@@ -5,6 +5,9 @@ const ApiError = require('../utils/ApiError');
 function overridesById(results) {
   if (results === undefined) return new Map();
   if (!Array.isArray(results)) throw ApiError.badRequest('results는 배열이어야 합니다.');
+  if (results.length !== 1) {
+    throw ApiError.badRequest('results에는 수신자별 결과 한 개만 지정해야 합니다.');
+  }
   const entries = results.map((result) => {
     const id = Number(result.messageResultId ?? result.id);
     if (!Number.isInteger(id) || id <= 0) {
@@ -43,6 +46,9 @@ async function sendMany({ senderId, messageId, results }, dependencies = {}) {
     (overrides.size === 0 || overrides.has(Number(result.id))) && result.status !== 'sent'
   );
   if (!candidates.length) throw ApiError.badRequest('발송할 수신자별 메시지가 없습니다.');
+  if (candidates.length !== 1) {
+    throw ApiError.badRequest('한 번에 한 명에게만 발송할 수 있습니다. messageResultId를 하나 선택해 주세요.');
+  }
   if (overrides.size && candidates.length !== overrides.size) {
     throw ApiError.badRequest('선택한 결과가 메시지에 속하지 않거나 이미 발송되었습니다.');
   }

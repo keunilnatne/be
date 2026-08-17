@@ -44,49 +44,40 @@ test('raw Gmail message encodes UTF-8 subject, body and recipient', () => {
   assert.match(mime, new RegExp(Buffer.from('안녕하세요\r\n회의입니다.').toString('base64')));
 });
 
-test('sendMany sends each recipient separately and stores final edits', async () => {
+test('sendMany sends one recipient and stores final edits', async () => {
   const first = result(1);
-  const second = result(2);
-  const storedMessage = message([first, second]);
+  const storedMessage = message([first]);
   const calls = [];
   const sent = await messageSendService.sendMany({
     senderId: 7,
     messageId: 10,
-    results: [{ messageResultId: 1, subject: 'final subject', body: 'final body' }, { messageResultId: 2 }],
+    results: [{ messageResultId: 1, subject: 'final subject', body: 'final body' }],
   }, {
     findMessage: async () => storedMessage,
     getAccessToken: async () => 'access-token',
     sendMessage: async (input) => { calls.push(input); return { id: `gmail-${calls.length}` }; },
   });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
   assert.equal(calls[0].to, 'recipient1@example.com');
   assert.equal(first.finalSubject, 'final subject');
   assert.equal(first.finalBody, 'final body');
   assert.equal(first.status, 'sent');
-  assert.equal(sent.sentCount, 2);
+  assert.equal(sent.sentCount, 1);
   assert.equal(storedMessage.status, 'sent');
 });
 
-test('one Gmail failure does not stop other recipients', async () => {
+test('sendMany rejects an old message with multiple unselected recipients', async () => {
   const first = result(1);
   const second = result(2);
   const storedMessage = message([first, second]);
-  let call = 0;
-  const sent = await messageSendService.sendMany({ senderId: 7, messageId: 10 }, {
-    findMessage: async () => storedMessage,
-    getAccessToken: async () => 'access-token',
-    sendMessage: async () => {
-      call += 1;
-      if (call === 1) throw new Error('temporary Gmail error');
-      return { id: 'gmail-success' };
-    },
-  });
-  assert.equal(first.status, 'failed');
-  assert.equal(first.errorMessage, 'temporary Gmail error');
-  assert.equal(second.status, 'sent');
-  assert.equal(sent.sentCount, 1);
-  assert.equal(sent.failedCount, 1);
-  assert.equal(storedMessage.status, 'partially_failed');
+  await assert.rejects(
+    messageSendService.sendMany({ senderId: 7, messageId: 10 }, {
+      findMessage: async () => storedMessage,
+      getAccessToken: async () => 'access-token',
+      sendMessage: async () => ({ id: 'should-not-send' }),
+    }),
+    /한 번에 한 명에게만 발송/
+  );
 });
 
 test('temporary Gmail failure is retried once', async () => {

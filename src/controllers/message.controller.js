@@ -7,6 +7,117 @@ const messageSendService = require('../services/messageSendService');
 const messageQualityService = require('../services/messageQualityService');
 const ApiError = require('../utils/ApiError');
 
+function requireSingleRecipient(items, fieldName = 'recipients') {
+  if (!Array.isArray(items) || items.length !== 1) {
+    throw ApiError.badRequest(`${fieldName}에는 수신자 한 명만 선택해야 합니다.`);
+  }
+  return items[0];
+}
+
+exports.requireSingleRecipient = requireSingleRecipient;
+
+function createOptimizeHandler(optimizeMany = messageOptimizationService.optimizeMany) {
+  return async (req, res) => {
+    const subject = String(req.body.subject || '').trim();
+    const body = String(req.body.body || '').trim();
+    if (!subject || !body) throw ApiError.badRequest('subject와 body는 필수입니다.');
+    const recipient = requireSingleRecipient(req.body.recipients || req.body.recipientIds);
+    const recipientId = Number(recipient?.id ?? recipient);
+    if (!Number.isInteger(recipientId) || recipientId <= 0) {
+      throw ApiError.badRequest('유효한 수신자를 선택해야 합니다.');
+    }
+    const { message, results } = await optimizeMany({
+      senderId: req.user.id,
+      recipientIds: [recipientId],
+      subject,
+      body,
+      purpose: req.body.purpose,
+      priority: req.body.priority,
+    });
+    const serialized = results.map((result) => ({
+      id: result.id,
+      recipientId: result.recipientId,
+      recipientName: result.recipientName,
+      recipientEmail: result.recipientEmail,
+      subject: result.optimizedSubject,
+      body: result.optimizedBody,
+      appliedContext: result.appliedContext,
+      qualityScore: result.qualityScore,
+      status: result.status,
+      error: result.errorMessage,
+    }));
+    const first = serialized[0];
+    return res.status(201).json({
+      messageId: message.id,
+      originalSubject: message.originalSubject,
+      originalBody: message.originalBody,
+      results: serialized,
+      recipientResults: serialized,
+      subject: first?.subject || subject,
+      body: first?.body || body,
+    });
+  };
+}
+
+function createSendHandler(sendMany = messageSendService.sendMany) {
+  return async (req, res) => {
+    const sent = await sendMany({
+      senderId: req.user.id,
+      messageId: Number(req.body.messageId),
+      results: req.body.results,
+    });
+    return res.json({
+      messageId: sent.message.id,
+      status: sent.message.status,
+      sentCount: sent.sentCount,
+      failedCount: sent.failedCount,
+      results: sent.outcomes.map(({ result, gmailMessageId, errorMessage }) => ({
+        id: result.id,
+        recipientId: result.recipientId,
+        recipientEmail: result.recipientEmail,
+        subject: result.finalSubject,
+        body: result.finalBody,
+        status: result.status,
+        sentAt: result.sentAt,
+        gmailMessageId,
+        error: errorMessage,
+      })),
+    });
+  };
+}
+
+function createAnalyzeQualityHandler(analyze = messageQualityService.analyze) {
+  return async (req, res) => {
+    const messageId = Number(req.params.messageId);
+    const outcomes = await analyze({
+      userId: req.user.id,
+      messageId,
+      resultIds: req.body.resultIds,
+    });
+    const successCount = outcomes.filter((outcome) => outcome.analysis).length;
+    return res.json({
+      messageId,
+      successCount,
+      failedCount: outcomes.length - successCount,
+      results: outcomes.map(({ result, analysis, error }) => ({
+        id: result.id,
+        recipientId: result.recipientId,
+        recipientName: result.recipientName,
+        qualityScore: analysis?.overallScore ?? null,
+        breakdown: analysis?.breakdown ?? null,
+        strengths: analysis?.strengths ?? [],
+        improvements: analysis?.improvements ?? [],
+        summary: analysis?.summary ?? null,
+        error,
+      })),
+    });
+  };
+}
+
+exports.createOptimizeHandler = createOptimizeHandler;
+exports.createSendHandler = createSendHandler;
+exports.createAnalyzeQualityHandler = createAnalyzeQualityHandler;
+
 // POST /api/messages/optimize - 다중 수신자 AI 메시지 최적화 (프론트엔드 연동 & 확장 지원)
 exports.optimize = async (req, res) => {
   const subject = String(req.body.subject || '').trim();
@@ -19,6 +130,7 @@ exports.optimize = async (req, res) => {
 
   // 1. 프론트엔드가 recipients 객체 배열을 넘긴 경우
   if (Array.isArray(recipients) && recipients.length > 0) {
+    requireSingleRecipient(recipients);
     let companyDna = null;
     try {
       companyDna = await CompanyDna.findOne({ where: { companyId: 1 } });
@@ -45,6 +157,7 @@ exports.optimize = async (req, res) => {
 
   // 2. recipientIds (ID 배열)로 넘겨온 경우
   if (Array.isArray(recipientIds) && recipientIds.length > 0 && req.user?.id) {
+    requireSingleRecipient(recipientIds, 'recipientIds');
     const { message, results } = await messageOptimizationService.optimizeMany({
       senderId: req.user.id,
       recipientIds,
@@ -80,20 +193,7 @@ exports.optimize = async (req, res) => {
   }
 
   // 3. 수신자 목록이 없는 경우 기본 최적화
-  const optimized = await aiService.optimizeMessage({
-    recipients: [],
-    subject,
-    body,
-  });
-
-  return res.json({
-    subject: optimized.subject,
-    body: optimized.body,
-    originalSubject: subject,
-    originalBody: body,
-    results: [],
-    recipientResults: [],
-  });
+  throw ApiError.badRequest('수신자 한 명을 선택해야 합니다.');
 };
 
 // POST /api/messages/send - 메시지 DB 저장 및 Gmail 실제 발송
@@ -101,6 +201,9 @@ exports.send = async (req, res) => {
   const { recipients, subject, body, originalSubject, originalBody, userId, messageId, results: inputResults } = req.body;
 
   if (messageId && req.user?.id) {
+    if (inputResults !== undefined) {
+      requireSingleRecipient(inputResults, 'results');
+    }
     const sent = await messageSendService.sendMany({
       senderId: req.user.id,
       messageId,
@@ -131,6 +234,7 @@ exports.send = async (req, res) => {
 
   const senderId = req.user?.id || (userId ? parseInt(userId, 10) : 1);
   const recipientList = Array.isArray(recipients) ? recipients : [];
+  requireSingleRecipient(recipientList);
 
   // 1. Message 본체 저장
   const messageRecord = await Message.create({
@@ -287,4 +391,3 @@ exports.analyzeQuality = async (req, res) => {
   }
   res.json({ score: 92, suggestions: ['핵심 정보가 잘 반영되었습니다.'] });
 };
-

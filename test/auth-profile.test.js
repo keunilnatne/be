@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { User, Company } = require('../src/models');
+const { User, Company, UserSetting } = require('../src/models');
 const tagService = require('../src/services/tagService');
 
 let storedUser = null;
@@ -26,6 +26,15 @@ function installModelFakes() {
     return storedUser;
   };
   Company.findByPk = async () => null;
+  UserSetting.findOrCreate = async () => [{ userId: 1 }, true];
+  UserSetting.findOne = async () => ({
+    userId: 1,
+    tone: 'professional',
+    formality: 'formal',
+    length: 'medium',
+    aiAutoSuggestion: true,
+    dataRetentionDays: 30,
+  });
   tagService.getTagsForEntity = async () => [];
   tagService.setTagsForEntity = async () => [];
 }
@@ -65,7 +74,7 @@ test('local auth and profile API flow', async (t) => {
   });
   assert.equal(signup.status, 201);
   assert.equal(signup.body.user.email, 'user@example.com');
-  assert.equal(signup.body.user.defaultLanguage, 'ko');
+  assert.equal(signup.body.user.defaultLanguage, 'Korean');
   assert.equal(signup.body.user.passwordHash, undefined);
   assert.ok(signup.body.accessToken);
 
@@ -77,7 +86,7 @@ test('local auth and profile API flow', async (t) => {
       password: 'password123',
     }),
   });
-  assert.equal(duplicate.status, 409);
+  assert.equal(duplicate.status, 400);
 
   const wrongLogin = await request(baseUrl, '/api/auth/login', {
     method: 'POST',

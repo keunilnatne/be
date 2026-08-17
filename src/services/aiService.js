@@ -213,7 +213,7 @@ module.exports = {
   parseJsonResponse,
   optimizeMessage,
   analyzeQuality,
+  buildQualityPrompt,
   convertMessage,
   inferTags,
 };
-

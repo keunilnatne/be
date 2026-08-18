@@ -21,13 +21,20 @@ const upload = multer({
   },
 });
 
+const optionalAuth = (req, res, next) => {
+  if (req.headers.authorization || req.get('authorization')) {
+    return authMiddleware(req, res, next);
+  }
+  next();
+};
+
 // 기존 CRUD
-router.get('/', companyController.getDna);
-router.put('/', companyController.updateDna);
+router.get('/', optionalAuth, companyController.getDna);
+router.put('/', optionalAuth, companyController.updateDna);
 router.get('/list', companyController.list);
 router.post('/list', companyController.create);
-router.get('/:companyId/dna', companyController.getDna);
-router.put('/:companyId/dna', companyController.updateDna);
+router.get('/:companyId/dna', optionalAuth, companyController.getDna);
+router.put('/:companyId/dna', optionalAuth, companyController.updateDna);
 
 // Company DNA 자동 추출
 router.post('/extract/file', upload.single('file'), companyController.extractFromFile);

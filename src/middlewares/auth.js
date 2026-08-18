@@ -4,7 +4,7 @@ const { User } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 module.exports = async function authMiddleware(req, res, next) {
-  const authHeader = req.headers.authorization;
+  const authHeader = req.get('authorization') || req.headers.authorization || '';
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     throw ApiError.unauthorized('인증 토큰이 필요합니다.');
   }
@@ -12,7 +12,8 @@ module.exports = async function authMiddleware(req, res, next) {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, env.jwt.secret);
-    const user = await User.findByPk(decoded.id);
+    const userId = decoded.id || decoded.sub;
+    const user = await User.findByPk(userId);
 
     if (!user) {
       throw ApiError.unauthorized('존재하지 않는 사용자입니다.');

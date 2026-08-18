@@ -62,7 +62,9 @@ exports.create = async (req, res) => {
 };
 
 exports.getDna = async (req, res) => {
-  const companyId = req.params.companyId ? parseInt(req.params.companyId, 10) : 1;
+  const companyId = req.params.companyId
+    ? parseInt(req.params.companyId, 10)
+    : (req.user?.companyId ? Number(req.user.companyId) : 1);
   const dna = await getOrCreateDna(companyId);
   res.json({
     decisionStructure: dna.decisionStructure,
@@ -76,7 +78,9 @@ exports.getDna = async (req, res) => {
 };
 
 exports.updateDna = async (req, res) => {
-  const companyId = req.params.companyId ? parseInt(req.params.companyId, 10) : 1;
+  const companyId = req.params.companyId
+    ? parseInt(req.params.companyId, 10)
+    : (req.user?.companyId ? Number(req.user.companyId) : 1);
   let dna = await getOrCreateDna(companyId);
 
   const { decisionStructure, channels, reporting, terms, rules, accuracy, aiEnabled } = req.body;

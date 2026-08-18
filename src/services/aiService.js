@@ -11,6 +11,8 @@ function ensureAiConfigured() {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function callGemini(prompt) {
   ensureAiConfigured();
 
@@ -23,10 +25,15 @@ async function callGemini(prompt) {
 
   let lastError = null;
 
-  for (const model of candidateModels) {
+  for (let i = 0; i < candidateModels.length; i++) {
+    const model = candidateModels[i];
+    if (i > 0) {
+      await sleep(300 * i); // Exponential-like backoff between retries
+    }
+
     const url = `${env.ai.apiUrl}/models/${model}:generateContent?key=${env.ai.apiKey}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
     try {
       const response = await fetch(url, {

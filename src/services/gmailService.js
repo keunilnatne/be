@@ -97,6 +97,51 @@ function extractHtmlBody(payload) {
   return '';
 }
 
+function extractAttachments(payload, messageId) {
+  const attachments = [];
+
+  function traverse(part) {
+    if (!part) return;
+    if (part.filename && part.filename.trim().length > 0) {
+      const size = part.body?.size || 0;
+      const attachmentId = part.body?.attachmentId || null;
+      attachments.push({
+        id: attachmentId || `${messageId}-${part.partId || attachments.length}`,
+        name: part.filename,
+        filename: part.filename,
+        mimeType: part.mimeType || 'application/octet-stream',
+        size: size,
+        attachmentId: attachmentId,
+        messageId: messageId,
+      });
+    }
+    if (part.parts && Array.isArray(part.parts)) {
+      for (const subPart of part.parts) {
+        traverse(subPart);
+      }
+    }
+  }
+
+  traverse(payload);
+  return attachments;
+}
+
+async function getAttachment(userId, messageId, attachmentId) {
+  const auth = await googleAuthService.getAuthorizedClientForUser(userId);
+  const gmail = google.gmail({ version: 'v1', auth });
+
+  const { data } = await gmail.users.messages.attachments.get({
+    userId: 'me',
+    messageId,
+    id: attachmentId,
+  });
+
+  return {
+    size: data.size,
+    data: data.data, // base64url encoded
+  };
+}
+
 function headerMap(headers = []) {
   return Object.fromEntries(headers.map((h) => [h.name, h.value]));
 }
@@ -137,6 +182,7 @@ async function getMessage(userId, messageId) {
   const headers = headerMap(data.payload?.headers);
   const plainBody = extractPlainTextBody(data.payload);
   const htmlBody = extractHtmlBody(data.payload);
+  const attachments = extractAttachments(data.payload, data.id);
 
   return {
     id: data.id,
@@ -146,6 +192,7 @@ async function getMessage(userId, messageId) {
     date: headers.Date || '',
     body: plainBody || data.snippet || '',
     htmlBody: htmlBody || '',
+    attachments,
   };
 }
 
@@ -218,4 +265,5 @@ module.exports = {
   sendMessage,
   listMessages,
   getMessage,
+  getAttachment,
 };

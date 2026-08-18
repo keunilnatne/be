@@ -14,6 +14,7 @@ const optionalAuth = (req, res, next) => {
 router.get('/status', optionalAuth, gmailController.status);
 router.get('/messages', optionalAuth, gmailController.listInbox);
 router.get('/messages/:messageId', optionalAuth, gmailController.getMessage);
+router.get('/messages/:messageId/attachments/:attachmentId', optionalAuth, gmailController.getAttachment);
 router.post('/send', optionalAuth, gmailController.send);
 
 module.exports = router;

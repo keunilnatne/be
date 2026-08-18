@@ -131,7 +131,8 @@ function cleanResponseSpeed(speed) {
   const s = String(speed || '').trim();
   if (s.includes('빠') || s.toLowerCase().includes('fast')) return '빠름';
   if (s.includes('느') || s.toLowerCase().includes('slow')) return '느림';
-  return '보통';
+  if (s.includes('보') || s.toLowerCase().includes('normal')) return '보통';
+  return s || null;
 }
 
 async function serializeRecipient(recipient) {
@@ -150,8 +151,8 @@ async function serializeRecipient(recipient) {
     relationship: recipient.relationship || 'External Partner',
     organizationRelation: recipient.relationship || 'External Partner',
     responseSpeed: cleanResponseSpeed(recipient.responseSpeed),
-    averageResponseMinutes: Number(recipient.averageResponseMinutes || 30),
-    collaborationActivity: recipient.collaborationActivity || 'Medium',
+    averageResponseMinutes: recipient.averageResponseMinutes ? Number(recipient.averageResponseMinutes) : null,
+    collaborationActivity: recipient.collaborationActivity || null,
     isOnline: recipient.isOnline ?? false,
     isFavorite: recipient.isFavorite ?? false,
     isRecent: recipient.isRecent ?? true,
@@ -159,7 +160,7 @@ async function serializeRecipient(recipient) {
     fullTime: recipient.fullTime ?? true,
     avatar: recipient.avatar || recipient.name?.slice(0, 1) || '?',
     memo: recipient.memo || '',
-    communicationStyle: recipient.communicationStyle || ['명확한 표현 선호', '짧은 단락', '직접 소통'],
+    communicationStyle: recipient.communicationStyle || null,
     tags: tags.map((t) => ({ id: t.id, category: t.category, name: t.name, label: t.label })),
   };
 }

@@ -136,8 +136,9 @@ ${recipientsInfo}
 [핵심 지시사항]
 1. 원문의 중요한 정보(날짜, 시간, 수치, 담당자 등)는 절대로 왜곡하거나 임의로 변경하지 마세요.
 2. 각 수신자의 언어(${recipients[0]?.language || 'Korean'}), 시간대, 직무 및 관계에 적합하게 제목과 본문을 다듬으세요.
-3. 원문 메시지가 수신자의 특성 및 비즈니스 소통 기준에 얼마나 부합하는지 및 최적화 완성도를 종합 평가하여 0~100점 사이의 적합도 점수(qualityScore: 정수)를 객관적으로 평가해 JSON에 포함하세요.
-4. 아래 JSON 포맷으로만 응답해 주세요. 다른 설명, 마크다운 서식은 붙이지 마세요:
+3. 발신자 및 수신자의 업무 시간과 시간대를 고려하여, 업무 외 시간(야간/주말)에 작성 및 발송되는 경우 수신자에게 부담을 주지 않도록 정중한 양해와 배려의 표현(예: '편하신 업무 시간에 확인 부탁드립니다')을 문맥에 맞게 자연스럽게 반영하세요.
+4. 원문 메시지가 수신자의 특성 및 비즈니스 소통 기준에 얼마나 부합하는지 및 최적화 완성도를 종합 평가하여 0~100점 사이의 적합도 점수(qualityScore: 정수)를 객관적으로 평가해 JSON에 포함하세요.
+5. 아래 JSON 포맷으로만 응답해 주세요. 다른 설명, 마크다운 서식은 붙이지 마세요:
 {
   "optimizedSubject": "최적화된 제목",
   "optimizedBody": "최적화된 본문",
@@ -186,16 +187,24 @@ async function optimizeMessage(input) {
   }
 
   // dev/hong style optimization
-  const recipientLang = input.context?.recipient?.language || 'Korean';
+  const senderInfo = input.context?.sender || {};
   const recipientInfo = input.context?.recipient || {};
+  const recipientLang = recipientInfo.language || 'Korean';
   const prompt = `당신은 최고 수준의 글로벌 비즈니스 이메일/메시지 최적화 AI 어시스턴트입니다.
 [원본 제목] ${input.subject}
 [원본 본문]
 ${input.body}
+[발신자 정보]
+- 직무: ${senderInfo.jobRole || '직무'}
+- 언어: ${senderInfo.defaultLanguage || 'Korean'}
+- 업무 시간: ${senderInfo.workHours || '09:00 - 18:00'} (${senderInfo.timezone || 'Asia/Seoul'})
+- 선호 스타일: ${senderInfo.preferredStyle || '명확하고 정중한 스타일'}
+
 [수신자 맥락 정보]
 - 이름: ${recipientInfo.name || '수신자'}
 - 직무: ${recipientInfo.jobRole || recipientInfo.position || recipientInfo.role || '직무'}
 - 언어: ${recipientLang}
+- 시간대: ${recipientInfo.timezone || 'Asia/Seoul'}
 - 관계: ${recipientInfo.relationship || recipientInfo.organizationRelation || '협업 관계'}
 - 응답 속도: ${recipientInfo.responseSpeed || '보통'}
 ${input.retryReason ? `[재시도 사유]: ${input.retryReason}` : ''}
@@ -204,8 +213,9 @@ ${input.retryReason ? `[재시도 사유]: ${input.retryReason}` : ''}
 1. 원문의 핵심 수치, 날짜, 담당자, 고유명사는 누락하거나 왜곡하지 마세요.
 2. 수신자의 언어('${recipientLang}')에 맞춰 제목(subject)과 본문(body)을 모두 해당 언어로 완벽하게 최적화 및 번역하세요. (예: 수신자 언어가 English인 경우 제목과 본문을 자연스러운 비즈니스 영어로 작성, Korean인 경우 비즈니스 한국어로 작성)
 3. 수신자의 직무, 조직 관계, 선호 스타일에 맞춰 설득력 있고 격식 있는 톤을 적용하세요.
-4. 원문이 수신자의 직무/언어/관계/소통 스타일에 얼마나 잘 부합하는지 0~100점 사이의 적합도 점수(qualityScore: 정수)를 객관적으로 평가하여 JSON에 포함하세요.
-5. 반드시 아래 JSON 형식으로만 응답하세요:
+4. 발신자 및 수신자의 업무 시간과 시간대를 고려하여, 업무 외 시간(야간/주말)에 작성 및 발송되는 경우 수신자에게 부담을 주지 않도록 정중한 양해와 배려의 표현(예: '편하신 업무 시간에 확인 부탁드립니다')을 문맥에 맞게 자연스럽게 반영하세요.
+5. 원문이 수신자의 직무/언어/관계/소통 스타일에 얼마나 잘 부합하는지 0~100점 사이의 적합도 점수(qualityScore: 정수)를 객관적으로 평가하여 JSON에 포함하세요.
+6. 반드시 아래 JSON 형식으로만 응답하세요:
 {"subject":"수신자 언어와 맥락에 최적화된 제목","body":"수신자 언어와 맥락에 최적화된 본문","qualityScore":92}`;
   const raw = await callGemini(prompt);
   const parsed = parseRequiredJson(raw, ['subject', 'body']);

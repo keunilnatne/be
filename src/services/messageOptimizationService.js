@@ -52,7 +52,8 @@ function buildAppliedContext(sender, recipient, companyDna, teamMemories) {
       defaultLanguage: sender.defaultLanguage,
       preferredStyle: sender.preferredStyle,
       customStyle: sender.customStyle,
-      timezone: sender.timezone,
+      timezone: sender.timezone || 'Asia/Seoul',
+      workHours: sender.workHours || '09:00 - 18:00',
     },
     recipient: {
       jobRole: recipient.jobRole,

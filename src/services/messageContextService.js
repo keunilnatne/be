@@ -7,7 +7,7 @@ async function loadOptimizationContext({ senderId, recipientIds, transaction }) 
     `SELECT id, name, email, job_role AS jobRole, job_title AS jobTitle,
             team, company_id AS companyId, company_name AS companyName,
             preferred_style AS preferredStyle, custom_style AS customStyle,
-            default_language AS defaultLanguage, timezone
+            default_language AS defaultLanguage, timezone, work_hours AS workHours
        FROM users
       WHERE id = :senderId`,
     { replacements: { senderId }, type: QueryTypes.SELECT, transaction }

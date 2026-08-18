@@ -127,6 +127,13 @@ function normalizeRecipientEmail(email) {
 
 exports.normalizeRecipientEmail = normalizeRecipientEmail;
 
+function cleanResponseSpeed(speed) {
+  const s = String(speed || '').trim();
+  if (s.includes('빠') || s.toLowerCase().includes('fast')) return '빠름';
+  if (s.includes('느') || s.toLowerCase().includes('slow')) return '느림';
+  return '보통';
+}
+
 async function serializeRecipient(recipient) {
   const tags = await tagService.getTagsForEntity('recipient', recipient.id);
   return {
@@ -142,8 +149,8 @@ async function serializeRecipient(recipient) {
     timezone: recipient.timezone || 'Asia/Seoul',
     relationship: recipient.relationship || 'External Partner',
     organizationRelation: recipient.relationship || 'External Partner',
-    responseSpeed: recipient.responseSpeed || '보통',
-    averageResponseMinutes: recipient.averageResponseMinutes || 30,
+    responseSpeed: cleanResponseSpeed(recipient.responseSpeed),
+    averageResponseMinutes: Number(recipient.averageResponseMinutes || 30),
     collaborationActivity: recipient.collaborationActivity || 'Medium',
     isOnline: recipient.isOnline ?? false,
     isFavorite: recipient.isFavorite ?? false,

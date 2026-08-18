@@ -25,6 +25,7 @@ async function serializeUser(user) {
     customStyle: user.customStyle || '',
     defaultLanguage: user.defaultLanguage || 'Korean',
     timezone: user.timezone || 'Asia/Seoul',
+    workHours: user.workHours || '09:00 - 18:00',
     googleConnected: !!user.googleConnected,
     googleEmail: user.googleEmail || '',
     company: user.Company ? { id: user.Company.id, name: user.Company.name } : null,
@@ -45,7 +46,7 @@ exports.list = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
-  const { name, email, jobRole, team, companyId, timezone, tagIds } = req.body;
+  const { name, email, jobRole, team, companyId, timezone, workHours, tagIds } = req.body;
   if (!name || !email) {
     throw ApiError.badRequest('name, email은 필수입니다.');
   }
@@ -57,6 +58,7 @@ exports.create = async (req, res) => {
     team,
     companyId: companyId || null,
     ...(timezone && { timezone }),
+    ...(workHours && { workHours }),
   });
 
   if (Array.isArray(tagIds) && tagIds.length) {
@@ -77,7 +79,7 @@ exports.update = async (req, res) => {
   const user = await User.findByPk(req.params.userId);
   if (!user) throw ApiError.notFound('사용자를 찾을 수 없습니다.');
 
-  const { name, email, jobRole, jobTitle, position, team, companyId, companyName, tools, preferredStyle, customStyle, defaultLanguage, timezone, tagIds } = req.body;
+  const { name, email, jobRole, jobTitle, position, team, companyId, companyName, tools, preferredStyle, customStyle, defaultLanguage, timezone, workHours, tagIds } = req.body;
   await user.update({
     ...(name !== undefined && { name }),
     ...(email !== undefined && { email }),
@@ -92,6 +94,7 @@ exports.update = async (req, res) => {
     ...(customStyle !== undefined && { customStyle }),
     ...(defaultLanguage !== undefined && { defaultLanguage }),
     ...(timezone !== undefined && { timezone }),
+    ...(workHours !== undefined && { workHours }),
   });
 
   if (Array.isArray(tagIds)) {
@@ -128,6 +131,7 @@ exports.updateMe = async (req, res) => {
     customStyle,
     defaultLanguage,
     timezone,
+    workHours,
     tagIds,
   } = req.body;
 
@@ -150,6 +154,7 @@ exports.updateMe = async (req, res) => {
     ...(customStyle !== undefined && { customStyle }),
     ...(defaultLanguage !== undefined && { defaultLanguage }),
     ...(timezone !== undefined && { timezone }),
+    ...(workHours !== undefined && { workHours }),
   });
 
   if (Array.isArray(tagIds)) {

@@ -26,6 +26,7 @@ User.init(
     customStyle: { type: DataTypes.TEXT },
     defaultLanguage: { type: DataTypes.STRING, defaultValue: 'Korean' },
     timezone: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Asia/Seoul' },
+    workHours: { type: DataTypes.STRING, defaultValue: '09:00 - 18:00' },
     googleConnected: { type: DataTypes.BOOLEAN, defaultValue: false },
     googleEmail: { type: DataTypes.STRING },
   },

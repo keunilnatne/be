@@ -212,9 +212,9 @@ exports.googleCallback = async (req, res) => {
   }
 
   const token = generateToken(user);
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const frontendUrl = process.env.FRONTEND_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173';
 
-  // 프론트엔드(localhost:5173)의 프록시 경로로 리다이렉트하여 같은 origin 컨텍스트에서 postMessage 발송
+  // 프론트엔드의 프록시 경로로 리다이렉트하여 postMessage 발송
   res.redirect(`${frontendUrl}/api/auth/google/success?email=${encodeURIComponent(account.googleEmail)}&token=${encodeURIComponent(token)}`);
 };
 
@@ -244,10 +244,10 @@ exports.googleSuccess = async (req, res) => {
           type: 'google-auth-success',
           email: ${JSON.stringify(email || '')},
           token: ${JSON.stringify(token || '')}
-        }, window.location.origin);
+        }, '*');
         setTimeout(() => {
           window.close();
-        }, 400);
+        }, 500);
       } else {
         window.location.href = '/welcome';
       }

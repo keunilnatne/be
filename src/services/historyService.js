@@ -52,17 +52,33 @@ async function list({ userId, type, q }, dependencies = {}) {
     order: [['createdAt', 'DESC'], [{ model: MessageResult, as: 'results' }, 'createdAt', 'DESC']],
   });
   const keyword = String(q || '').trim().toLowerCase();
-  return messages.flatMap((message) => message.results
-    .filter((result) => matchesType(result, type))
-    .map((result) => serialize(message, result)))
-    .filter((item) => !keyword || [
-      item.recipient,
-      item.recipientEmail,
-      item.purpose,
-      item.subject,
-      item.content,
-      item.status,
-    ].some((value) => String(value || '').toLowerCase().includes(keyword)));
+
+  const allSerialized = messages.flatMap((message) => {
+    const recipientMap = new Map();
+    for (const result of message.results) {
+      if (!matchesType(result, type)) continue;
+      const key = String(result.recipientId || result.recipientEmail || result.recipientName || 'default');
+      const existing = recipientMap.get(key);
+      if (!existing) {
+        recipientMap.set(key, result);
+      } else {
+        const priority = (r) => (r.status === 'sent' ? 3 : r.status === 'converted' ? 2 : 1);
+        if (priority(result) > priority(existing)) {
+          recipientMap.set(key, result);
+        }
+      }
+    }
+    return Array.from(recipientMap.values()).map((result) => serialize(message, result));
+  });
+
+  return allSerialized.filter((item) => !keyword || [
+    item.recipient,
+    item.recipientEmail,
+    item.purpose,
+    item.subject,
+    item.content,
+    item.status,
+  ].some((value) => String(value || '').toLowerCase().includes(keyword)));
 }
 
 async function getOne({ userId, id }, dependencies = {}) {

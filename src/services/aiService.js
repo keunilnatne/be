@@ -14,45 +14,64 @@ function ensureAiConfigured() {
 async function callGemini(prompt) {
   ensureAiConfigured();
 
-  const url = `${env.ai.apiUrl}/models/${env.ai.model}:generateContent?key=${env.ai.apiKey}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  const candidateModels = Array.from(new Set([
+    env.ai.model,
+    'gemini-flash-lite-latest',
+    'gemini-2.5-flash-lite',
+    'gemini-flash-latest',
+  ].filter(Boolean)));
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      signal: controller.signal,
-    });
-    const rawBody = await response.text();
-    let data = {};
+  let lastError = null;
+
+  for (const model of candidateModels) {
+    const url = `${env.ai.apiUrl}/models/${model}:generateContent?key=${env.ai.apiKey}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+
     try {
-      data = rawBody ? JSON.parse(rawBody) : {};
-    } catch {
-      if (response.ok) throw aiFailure(502, 'INVALID_PROVIDER_RESPONSE');
-    }
-
-    if (!response.ok) {
-      console.warn('[Gemini API Notice]:', data?.error?.message || 'API Call failed');
-      if (response.status === 429) throw aiFailure(429, 'RATE_LIMITED');
-      if (response.status === 401 || response.status === 403) {
-        throw aiFailure(503, 'INVALID_API_CREDENTIALS');
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        signal: controller.signal,
+      });
+      const rawBody = await response.text();
+      let data = {};
+      try {
+        data = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        if (response.ok) throw aiFailure(502, 'INVALID_PROVIDER_RESPONSE');
       }
-      throw aiFailure(502, 'PROVIDER_REQUEST_FAILED');
-    }
 
-    const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('');
-    if (!text?.trim()) throw aiFailure(502, 'EMPTY_PROVIDER_RESPONSE');
-    return text.trim();
-  } catch (error) {
-    console.warn('[Gemini API Exception]:', error.message);
-    if (error.code === 'AI_GENERATION_FAILED') throw error;
-    if (error.name === 'AbortError') throw aiFailure(504, 'PROVIDER_TIMEOUT');
-    throw aiFailure(502, 'PROVIDER_CONNECTION_FAILED');
-  } finally {
-    clearTimeout(timeout);
+      if (!response.ok) {
+        console.warn(`[Gemini API Notice] (${model}):`, data?.error?.message || 'API Call failed');
+        if (response.status === 401 || response.status === 403) {
+          throw aiFailure(503, 'INVALID_API_CREDENTIALS');
+        }
+        lastError = response.status === 429 ? aiFailure(429, 'RATE_LIMITED') : aiFailure(502, 'PROVIDER_REQUEST_FAILED');
+        continue;
+      }
+
+      const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('');
+      if (!text?.trim()) {
+        lastError = aiFailure(502, 'EMPTY_PROVIDER_RESPONSE');
+        continue;
+      }
+      return text.trim();
+    } catch (error) {
+      console.warn(`[Gemini API Exception] (${model}):`, error.message);
+      if (error.code === 'AI_GENERATION_FAILED' && error.statusCode === 503) {
+        throw error;
+      }
+      lastError = error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+
+  if (lastError?.code === 'AI_GENERATION_FAILED') throw lastError;
+  if (lastError?.name === 'AbortError') throw aiFailure(504, 'PROVIDER_TIMEOUT');
+  throw aiFailure(502, 'PROVIDER_CONNECTION_FAILED');
 }
 
 function parseJsonResponse(raw) {

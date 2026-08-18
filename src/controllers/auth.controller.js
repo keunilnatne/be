@@ -1,8 +1,10 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { User, UserSetting, Company } = require('../models');
+const { User, UserSetting, Company, GmailIntegration } = require('../models');
 const env = require('../config/env');
 const googleAuthService = require('../services/googleAuthService');
+const googleAccountStore = require('../services/googleAccountStore');
+const tokenEncryption = require('../services/tokenEncryptionService');
 const ApiError = require('../utils/ApiError');
 const serializeUser = require('../utils/serializeUser');
 
@@ -209,6 +211,37 @@ exports.googleCallback = async (req, res) => {
     user.googleConnected = true;
     user.googleEmail = account.googleEmail;
     await user.save();
+  }
+
+  // Google OAuth 계정 스토어 및 GmailIntegration 즉시 연동
+  try {
+    await googleAccountStore.upsert(user.id, {
+      googleEmail: account.googleEmail,
+      accessToken: account.accessToken,
+      refreshToken: account.refreshToken,
+      expiryDate: account.expiryDate,
+    });
+
+    const rawToken = account.refreshToken || account.accessToken || 'google-token';
+    const encryptedRefreshToken = tokenEncryption.encrypt(rawToken);
+    const existingIntegration = await GmailIntegration.findOne({ where: { userId: user.id } });
+    if (existingIntegration) {
+      existingIntegration.googleEmail = account.googleEmail;
+      existingIntegration.encryptedRefreshToken = encryptedRefreshToken;
+      existingIntegration.scopes = ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send'];
+      existingIntegration.connectedAt = new Date();
+      await existingIntegration.save();
+    } else {
+      await GmailIntegration.create({
+        userId: user.id,
+        googleEmail: account.googleEmail,
+        encryptedRefreshToken,
+        scopes: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send'],
+        connectedAt: new Date(),
+      });
+    }
+  } catch (syncErr) {
+    console.warn('[Google Gmail integration auto-sync warn]:', syncErr.message);
   }
 
   const token = generateToken(user);

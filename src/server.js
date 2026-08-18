@@ -8,9 +8,6 @@ async function start() {
     await sequelize.authenticate();
     console.log('[DB] MySQL 연결 성공');
 
-    // 개발 초기 단계 편의용. 운영에서는 마이그레이션으로 대체 예정.
-    // 공용 DB의 기존 컬럼을 자동 변경하지 않는다.
-    // 스키마 변경은 팀 검토를 거친 별도 마이그레이션으로만 수행한다.
     await sequelize.sync();
     console.log('[DB] 스키마 동기화 완료');
 

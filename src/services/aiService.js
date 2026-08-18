@@ -158,11 +158,21 @@ async function optimizeMessage(input) {
   }
 
   // dev/hong style optimization
-  const prompt = `당신은 업무 메시지 편집 AI입니다.
-[제목] ${input.subject}
-[본문] ${input.body}
-[맥락] ${JSON.stringify(input.context || {}, null, 2)}
-JSON만 출력: {"subject":"최적화된 제목","body":"최적화된 본문","qualityScore":92}`;
+  const recipientLang = input.context?.recipient?.language || 'Korean';
+  const prompt = `당신은 최고 수준의 글로벌 비즈니스 이메일/메시지 최적화 AI 어시스턴트입니다.
+[원본 제목] ${input.subject}
+[원본 본문]
+${input.body}
+[수신자 맥락 정보]
+${JSON.stringify(input.context || {}, null, 2)}
+${input.retryReason ? `[재시도 사유]: ${input.retryReason}` : ''}
+
+[지시사항]
+1. 원문의 핵심 수치, 날짜, 담당자, 고유명사는 누락하거나 왜곡하지 마세요.
+2. 수신자의 언어('${recipientLang}')에 맞춰 제목(subject)과 본문(body)을 모두 해당 언어로 완벽하게 최적화 및 번역하세요. (예: 수신자 언어가 English인 경우 제목과 본문을 자연스러운 비즈니스 영어로 작성, Korean인 경우 비즈니스 한국어로 작성)
+3. 수신자의 직무, 조직 관계, 선호 스타일에 맞춰 설득력 있고 격식 있는 톤을 적용하세요.
+4. 반드시 아래 JSON 형식으로만 응답하세요:
+{"subject":"수신자 언어와 맥락에 최적화된 제목","body":"수신자 언어와 맥락에 최적화된 본문","qualityScore":95}`;
   const raw = await callGemini(prompt);
   const parsed = parseRequiredJson(raw, ['subject', 'body']);
   return {

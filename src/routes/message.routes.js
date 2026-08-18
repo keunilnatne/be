@@ -15,8 +15,13 @@ const optionalAuth = (req, res, next) => {
 router.post('/optimize', authenticate, messageController.optimizeAuthenticated);
 router.post('/send', authenticate, messageController.sendAuthenticated);
 
+// 임시 저장함 (Drafts)
+router.get('/drafts', authenticate, messageController.listDrafts);
+router.post('/drafts', authenticate, messageController.saveDraft);
+router.delete('/drafts/:draftId', authenticate, messageController.deleteDraft);
+
 // 초안 및 단일 변환 엔드포인트
-router.post('/', optionalAuth, messageController.createDraft);
+router.post('/', optionalAuth, messageController.saveDraft);
 router.post('/convert', optionalAuth, messageController.convert);
 router.post('/:messageId/analyze-context', optionalAuth, messageController.analyzeContext);
 router.post('/:messageId/analyze-quality', optionalAuth, messageController.analyzeQuality);

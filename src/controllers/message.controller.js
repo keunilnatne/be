@@ -509,9 +509,115 @@ exports.saveRevision = async (req, res) => {
   res.json(result);
 };
 
-exports.createDraft = async (req, res) => {
-  res.json({ message: 'Draft saved' });
+exports.listDrafts = async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.json([]);
+  }
+
+  const drafts = await Message.findAll({
+    where: { senderId: userId, status: 'draft' },
+    include: [{ model: MessageResult, as: 'results', required: false }],
+    order: [['updatedAt', 'DESC']],
+  });
+
+  const formatted = drafts.map((msg) => ({
+    id: String(msg.id),
+    subject: msg.originalSubject || '',
+    body: msg.originalBody || '',
+    recipients: msg.results?.map((r) => ({
+      id: String(r.recipientId || ''),
+      name: r.recipientName || '',
+      position: r.recipientRole || '',
+      company: r.recipientCompany || '',
+      email: r.recipientEmail || '',
+    })) || [],
+    createdAt: (msg.createdAt || new Date()).toISOString(),
+    updatedAt: (msg.updatedAt || msg.createdAt || new Date()).toISOString(),
+  }));
+
+  res.json(formatted);
 };
+
+exports.saveDraft = async (req, res) => {
+  const userId = req.user?.id || null;
+  const { id, subject, body, recipients } = req.body;
+
+  let message;
+  const parsedId = id && !isNaN(Number(id)) ? Number(id) : null;
+
+  if (parsedId && userId) {
+    message = await Message.findOne({ where: { id: parsedId, senderId: userId, status: 'draft' } });
+  }
+
+  if (message) {
+    await message.update({
+      originalSubject: subject || '',
+      originalBody: body || '',
+      updatedAt: new Date(),
+    });
+  } else {
+    message = await Message.create({
+      senderId: userId,
+      originalSubject: subject || '',
+      originalBody: body || '',
+      status: 'draft',
+      purpose: subject || '임시 저장된 메시지',
+    });
+  }
+
+  if (Array.isArray(recipients) && recipients.length > 0) {
+    await MessageResult.destroy({ where: { messageId: message.id } });
+    for (const r of recipients) {
+      await MessageResult.create({
+        messageId: message.id,
+        recipientId: Number(r.id) || null,
+        recipientName: r.name || '',
+        recipientRole: r.position || r.role || '',
+        recipientCompany: r.company || '',
+        recipientEmail: r.email || '',
+        status: 'converted',
+      });
+    }
+  }
+
+  const results = await MessageResult.findAll({ where: { messageId: message.id } });
+
+  res.status(201).json({
+    id: String(message.id),
+    subject: message.originalSubject || '',
+    body: message.originalBody || '',
+    recipients: results.map((r) => ({
+      id: String(r.recipientId || ''),
+      name: r.recipientName || '',
+      position: r.recipientRole || '',
+      company: r.recipientCompany || '',
+      email: r.recipientEmail || '',
+    })),
+    createdAt: (message.createdAt || new Date()).toISOString(),
+    updatedAt: (message.updatedAt || new Date()).toISOString(),
+  });
+};
+
+exports.deleteDraft = async (req, res) => {
+  const userId = req.user?.id;
+  const draftId = Number(req.params.draftId);
+
+  if (!draftId) throw ApiError.badRequest('유효한 임시 저장 ID가 필요합니다.');
+
+  const where = { id: draftId, status: 'draft' };
+  if (userId) where.senderId = userId;
+
+  const msg = await Message.findOne({ where });
+  if (!msg) throw ApiError.notFound('임시 저장된 메시지를 찾을 수 없습니다.');
+
+  await MessageResult.destroy({ where: { messageId: draftId } });
+  await msg.destroy();
+
+  res.json({ message: '임시 저장된 메시지가 삭제되었습니다.' });
+};
+
+exports.createDraft = exports.saveDraft;
 
 exports.analyzeContext = async (req, res) => {
   res.json({ questions: [] });

@@ -202,6 +202,7 @@ exports.googleCallback = async (req, res) => {
 
   // DB에 Google 로그인 유저 자동 생성 및 업데이트
   let user = await User.findOne({ where: { email: account.googleEmail } });
+  const isNewUser = !user;
   if (!user) {
     user = await User.create({
       name: account.googleEmail.split('@')[0],
@@ -273,16 +274,17 @@ exports.googleCallback = async (req, res) => {
         window.opener.postMessage({
           type: 'google-auth-success',
           email: ${JSON.stringify(email || '')},
-          token: ${JSON.stringify(token || '')}
+          token: ${JSON.stringify(token || '')},
+          isNewUser: ${JSON.stringify(isNewUser)}
         }, '*');
         setTimeout(() => {
           window.close();
         }, 500);
       } else {
-        window.location.href = '${frontendUrl}/welcome';
+        window.location.href = '${frontendUrl}/welcome${isNewUser ? '?newAccount=true' : ''}';
       }
     } catch (e) {
-      window.location.href = '${frontendUrl}/welcome';
+      window.location.href = '${frontendUrl}/welcome${isNewUser ? '?newAccount=true' : ''}';
     }
   </script>
 </body>

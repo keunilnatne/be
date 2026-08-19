@@ -237,7 +237,9 @@ exports.lookupByEmail = async (req, res) => {
 
   const commStyle = Array.isArray(user.communicationPreferences) && user.communicationPreferences.length
     ? user.communicationPreferences
-    : (user.preferredStyle ? [user.preferredStyle] : ['명확하고 간결하게']);
+    : (user.preferredStyle ? [user.preferredStyle] : (user.customStyle ? [user.customStyle] : ['명확하고 간결하게']));
+
+  const preferredStyle = commStyle.join(', ') || user.preferredStyle || '';
 
   res.json({
     id: user.id,
@@ -252,7 +254,7 @@ exports.lookupByEmail = async (req, res) => {
     timezone: user.timezone || 'Asia/Seoul',
     organizationRelation: '팀원',
     communicationStyle: commStyle,
-    preferredStyle: user.preferredStyle || '',
+    preferredStyle,
     isIeumUser: true,
   });
 };

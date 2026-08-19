@@ -137,6 +137,35 @@ function cleanResponseSpeed(speed) {
 
 async function serializeRecipient(recipient) {
   const tags = await tagService.getTagsForEntity('recipient', recipient.id);
+
+  let commStyle = recipient.communicationStyle;
+
+  // 이메일이 일치하는 실제 가입 회원(User)이 있으면 최신 선호 소통 스타일을 실시간 동기화
+  if (recipient.email) {
+    try {
+      const registeredUser = await User.findOne({ where: { email: recipient.email } });
+      if (registeredUser) {
+        if (Array.isArray(registeredUser.communicationPreferences) && registeredUser.communicationPreferences.length > 0) {
+          commStyle = registeredUser.communicationPreferences;
+        } else if (registeredUser.preferredStyle) {
+          commStyle = [registeredUser.preferredStyle];
+        } else if (registeredUser.customStyle) {
+          commStyle = [registeredUser.customStyle];
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const finalStyles = Array.isArray(commStyle) && commStyle.length > 0
+    ? commStyle
+    : (typeof commStyle === 'string' && commStyle.trim()
+      ? commStyle.split(',').map((s) => s.trim()).filter(Boolean)
+      : ['명확하고 간결하게']);
+
+  const preferredStyle = finalStyles.join(', ');
+
   return {
     id: recipient.id,
     name: recipient.name,
@@ -160,7 +189,8 @@ async function serializeRecipient(recipient) {
     fullTime: recipient.fullTime ?? true,
     avatar: recipient.avatar || recipient.name?.slice(0, 1) || '?',
     memo: recipient.memo || '',
-    communicationStyle: recipient.communicationStyle || null,
+    communicationStyle: finalStyles,
+    preferredStyle,
     tags: tags.map((t) => ({ id: t.id, category: t.category, name: t.name, label: t.label })),
   };
 }
@@ -358,8 +388,20 @@ exports.update = async (req, res) => {
     avatar,
     memo,
     communicationStyle,
+    preferredStyle,
+    customStyle,
     tagIds,
   } = req.body;
+
+  const finalStyle = communicationStyle !== undefined
+    ? (Array.isArray(communicationStyle)
+      ? communicationStyle
+      : (typeof communicationStyle === 'string' && communicationStyle.trim()
+        ? communicationStyle.split(',').map((s) => s.trim()).filter(Boolean)
+        : [communicationStyle]))
+    : (preferredStyle !== undefined || customStyle !== undefined
+      ? (preferredStyle || customStyle ? (preferredStyle || customStyle).split(',').map((s) => s.trim()).filter(Boolean) : [])
+      : undefined);
 
   await recipient.update({
     ...(name !== undefined && { name }),
@@ -380,7 +422,7 @@ exports.update = async (req, res) => {
     ...(fullTime !== undefined && { fullTime }),
     ...(avatar !== undefined && { avatar }),
     ...(memo !== undefined && { memo }),
-    ...(communicationStyle !== undefined && { communicationStyle }),
+    ...(finalStyle !== undefined && { communicationStyle: finalStyle }),
   });
 
   if (Array.isArray(tagIds)) {

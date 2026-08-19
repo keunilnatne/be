@@ -146,8 +146,11 @@ exports.changePassword = async (req, res) => {
 
 // GET /api/auth/google
 exports.googleAuthUrl = async (req, res) => {
-  const { userId } = req.query;
+  const { userId, format } = req.query;
   const url = googleAuthService.getAuthUrl(userId || 'guest');
+  if (format === 'json' || req.headers.accept?.includes('application/json')) {
+    return res.json({ url });
+  }
   res.redirect(url);
 };
 

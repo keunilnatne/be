@@ -9,7 +9,7 @@ const router = Router();
 // multer 설정 - 임시 디렉토리에 파일 저장
 const upload = multer({
   dest: path.join(__dirname, '../../uploads/temp'),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   fileFilter: (req, file, cb) => {
     const allowed = ['.pdf', '.docx', '.txt', '.md'];
     const ext = path.extname(file.originalname).toLowerCase();

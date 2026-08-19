@@ -11,7 +11,7 @@ const initialPatterns = [
     purpose: '신규 UI 컴포넌트의 시각적 일관성 검토 및 브랜드 가이드 준수 확인',
     reason: '사용자 데이터 밀도 최적화를 위해 기존 카드 시스템의 패딩 값을 24px에서 16px로 축소함',
     request: '가독성 저하 여부 확인\n모바일 해상도 대응 확인',
-    deadline: '2024-11-20 (수) 15:00까지',
+    deadline: '',
     unread: true,
     status: 'approved',
   },

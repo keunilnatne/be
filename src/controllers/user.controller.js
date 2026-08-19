@@ -241,11 +241,12 @@ exports.lookupByEmail = async (req, res) => {
     throw ApiError.notFound('이음에 가입된 회원을 찾을 수 없습니다.', 'IEUM_USER_NOT_FOUND');
   }
 
+  const customStyle = user.customStyle || '';
   const commStyle = Array.isArray(user.communicationPreferences) && user.communicationPreferences.length
     ? user.communicationPreferences
     : (user.preferredStyle ? [user.preferredStyle] : (user.customStyle ? [user.customStyle] : ['명확하고 간결하게']));
 
-  const preferredStyle = commStyle.join(', ') || user.preferredStyle || '';
+  const preferredStyle = commStyle.join(', ') || user.preferredStyle || user.customStyle || '';
 
   res.json({
     id: user.id,
@@ -255,12 +256,13 @@ exports.lookupByEmail = async (req, res) => {
     role: user.jobRole || user.position || user.jobTitle || '',
     position: user.position || user.jobTitle || user.jobRole || '',
     company: user.companyName || (user.Company ? user.Company.name : ''),
-    country: 'South Korea',
+    country: user.country || 'South Korea',
     language: user.defaultLanguage || 'Korean',
     timezone: user.timezone || 'Asia/Seoul',
     organizationRelation: '팀원',
     communicationStyle: commStyle,
     preferredStyle,
+    customStyle,
     isIeumUser: true,
   });
 };

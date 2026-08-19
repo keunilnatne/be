@@ -28,6 +28,8 @@ Recipient.init(
     avatar: { type: DataTypes.STRING },
     memo: { type: DataTypes.TEXT },
     communicationStyle: { type: DataTypes.JSON },
+    preferredStyle: { type: DataTypes.STRING },
+    customStyle: { type: DataTypes.TEXT },
   },
   { sequelize, modelName: 'Recipient', tableName: 'recipients' }
 );

@@ -139,12 +139,16 @@ async function serializeRecipient(recipient) {
   const tags = await tagService.getTagsForEntity('recipient', recipient.id);
 
   let commStyle = recipient.communicationStyle;
+  let userCustomStyle = recipient.customStyle || '';
 
-  // 이메일이 일치하는 실제 가입 회원(User)이 있으면 최신 선호 소통 스타일을 실시간 동기화
+  // 이메일이 일치하는 실제 가입 회원(User)이 있으면 최신 선호 소통 스타일 및 추가 스타일을 실시간 동기화
   if (recipient.email) {
     try {
       const registeredUser = await User.findOne({ where: { email: recipient.email } });
       if (registeredUser) {
+        if (registeredUser.customStyle) {
+          userCustomStyle = registeredUser.customStyle;
+        }
         if (Array.isArray(registeredUser.communicationPreferences) && registeredUser.communicationPreferences.length > 0) {
           commStyle = registeredUser.communicationPreferences;
         } else if (registeredUser.preferredStyle) {
@@ -191,6 +195,7 @@ async function serializeRecipient(recipient) {
     memo: recipient.memo || '',
     communicationStyle: finalStyles,
     preferredStyle,
+    customStyle: userCustomStyle || recipient.customStyle || '',
     tags: tags.map((t) => ({ id: t.id, category: t.category, name: t.name, label: t.label })),
   };
 }
@@ -342,6 +347,8 @@ exports.create = async (req, res) => {
     avatar,
     memo,
     communicationStyle: finalStyle,
+    preferredStyle: preferredStyle || (Array.isArray(finalStyle) ? finalStyle.join(', ') : ''),
+    customStyle: customStyle || '',
   });
 
   if (Array.isArray(tagIds) && tagIds.length) {
@@ -423,6 +430,8 @@ exports.update = async (req, res) => {
     ...(avatar !== undefined && { avatar }),
     ...(memo !== undefined && { memo }),
     ...(finalStyle !== undefined && { communicationStyle: finalStyle }),
+    ...(preferredStyle !== undefined && { preferredStyle }),
+    ...(customStyle !== undefined && { customStyle }),
   });
 
   if (Array.isArray(tagIds)) {

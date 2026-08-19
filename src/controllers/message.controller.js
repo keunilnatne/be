@@ -44,9 +44,27 @@ function createOptimizeHandler(optimizeMany = messageOptimizationService.optimiz
     const body = String(req.body.body || '').trim();
     if (!subject || !body) throw ApiError.badRequest('subject와 body는 필수입니다.');
     const recipient = requireSingleRecipient(req.body.recipients || req.body.recipientIds);
-    const recipientId = Number(recipient?.id ?? recipient);
+    let recipientId = Number(recipient?.id ?? recipient);
     if (!Number.isInteger(recipientId) || recipientId <= 0) {
-      throw ApiError.badRequest('유효한 수신자를 선택해야 합니다.');
+      if (recipient && typeof recipient === 'object' && (recipient.email || recipient.name)) {
+        let found = recipient.email ? await Recipient.findOne({ where: { userId: req.user.id, email: recipient.email } }) : null;
+        if (!found) {
+          found = await Recipient.create({
+            userId: req.user.id,
+            name: recipient.name || recipient.email?.split('@')[0] || '수신자',
+            email: recipient.email || null,
+            role: recipient.role || recipient.position || '연락처',
+            company: recipient.company || '',
+            country: recipient.country || 'South Korea',
+            language: recipient.language || 'Korean',
+            timezone: recipient.timezone || 'Asia/Seoul',
+            organizationRelation: recipient.organizationRelation || recipient.relationship || '외부 파트너',
+          });
+        }
+        recipientId = found.id;
+      } else {
+        throw ApiError.badRequest('유효한 수신자를 선택해야 합니다.');
+      }
     }
     const { message, results } = await optimizeMany({
       senderId: req.user.id,

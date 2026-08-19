@@ -12,6 +12,7 @@ const MessageAnalysis = require('./MessageAnalysis');
 const UserSetting = require('./UserSetting');
 const TeamMemory = require('./TeamMemory');
 const GmailIntegration = require('./GmailIntegration');
+const InboxMail = require('./InboxMail');
 
 Tag.hasMany(EntityTag, { foreignKey: 'tagId' });
 EntityTag.belongsTo(Tag, { foreignKey: 'tagId' });
@@ -27,6 +28,9 @@ Recipient.belongsTo(User, { foreignKey: 'ownerUserId', as: 'Owner' });
 
 User.hasMany(Message, { foreignKey: 'senderId', as: 'Messages' });
 Message.belongsTo(User, { foreignKey: 'senderId', as: 'Sender' });
+
+User.hasMany(InboxMail, { foreignKey: 'userId', as: 'InboxMails', onDelete: 'CASCADE' });
+InboxMail.belongsTo(User, { foreignKey: 'userId', as: 'User' });
 
 Message.hasMany(MessageResult, {
   foreignKey: 'messageId',
@@ -66,5 +70,6 @@ module.exports = {
   UserSetting,
   TeamMemory,
   GmailIntegration,
+  InboxMail,
 };
 

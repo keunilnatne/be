@@ -22,7 +22,7 @@ exports.status = async (req, res) => {
 
 exports.listInbox = async (req, res) => {
   const userId = getEffectiveUserId(req);
-  const maxResults = Number(req.query.maxResults) || 20;
+  const maxResults = Number(req.query.maxResults) || 50;
   const q = req.query.q || undefined;
   try {
     const messages = await gmailService.listMessages(userId, { maxResults, q });

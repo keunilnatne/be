@@ -11,6 +11,7 @@ function getEffectiveUserId(req) {
 
 // FS-009: Gmail 연동 및 이메일 작성 (받은 편지함 조회, 상세 조회, 발송)
 exports.status = async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   try {
     const userId = getEffectiveUserId(req);
     const status = await googleAuthService.getStatus(userId);

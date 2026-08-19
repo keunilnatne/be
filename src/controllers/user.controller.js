@@ -1,4 +1,18 @@
-const { User, Company, UserSetting } = require('../models');
+const { Op } = require('sequelize');
+const {
+  sequelize,
+  User,
+  Company,
+  UserSetting,
+  Recipient,
+  Message,
+  MessageResult,
+  MessageAnalysis,
+  TeamMemory,
+  GmailIntegration,
+  InboxMail,
+  EntityTag,
+} = require('../models');
 const tagService = require('../services/tagService');
 const ApiError = require('../utils/ApiError');
 
@@ -221,13 +235,73 @@ exports.resetPersonalization = async (req, res) => {
 // DELETE /api/users/me
 exports.deleteMe = async (req, res) => {
   const user = req.user;
-  try {
-    await UserSetting.destroy({ where: { userId: user.id } });
-  } catch (e) {
-    // ignore
-  }
-  await user.destroy();
-  res.json({ message: '계정이 성공적으로 삭제되었습니다.' });
+  const deleted = await sequelize.transaction(async (transaction) => {
+    const transactionOptions = { transaction };
+    const messages = await Message.findAll({
+      attributes: ['id'],
+      where: { senderId: user.id },
+      raw: true,
+      ...transactionOptions,
+    });
+    const messageIds = messages.map(({ id }) => id);
+
+    const recipients = await Recipient.findAll({
+      attributes: ['id'],
+      where: { ownerUserId: user.id },
+      raw: true,
+      ...transactionOptions,
+    });
+    const recipientIds = recipients.map(({ id }) => id);
+
+    let messageAnalyses = 0;
+    let messageResults = 0;
+    if (messageIds.length) {
+      messageAnalyses = await MessageAnalysis.destroy({
+        where: { messageId: { [Op.in]: messageIds } },
+        ...transactionOptions,
+      });
+      messageResults = await MessageResult.destroy({
+        where: { messageId: { [Op.in]: messageIds } },
+        ...transactionOptions,
+      });
+    }
+
+    let recipientTags = 0;
+    if (recipientIds.length) {
+      recipientTags = await EntityTag.destroy({
+        where: { entityType: 'recipient', entityId: { [Op.in]: recipientIds } },
+        ...transactionOptions,
+      });
+      await MessageResult.update(
+        { recipientId: null },
+        { where: { recipientId: { [Op.in]: recipientIds } }, ...transactionOptions },
+      );
+    }
+
+    const counts = {
+      messageAnalyses,
+      messageResults,
+      messages: await Message.destroy({ where: { senderId: user.id }, ...transactionOptions }),
+      recipientTags,
+      recipients: await Recipient.destroy({ where: { ownerUserId: user.id }, ...transactionOptions }),
+      teamMemories: await TeamMemory.destroy({ where: { userId: user.id }, ...transactionOptions }),
+      inboxMails: await InboxMail.destroy({ where: { userId: user.id }, ...transactionOptions }),
+      gmailIntegrations: await GmailIntegration.destroy({ where: { userId: user.id }, ...transactionOptions }),
+      userTags: await EntityTag.destroy({
+        where: { entityType: 'user', entityId: user.id },
+        ...transactionOptions,
+      }),
+      userSettings: await UserSetting.destroy({ where: { userId: user.id }, ...transactionOptions }),
+    };
+
+    await user.destroy(transactionOptions);
+    return counts;
+  });
+
+  res.json({
+    message: '계정과 모든 관련 데이터가 성공적으로 삭제되었습니다.',
+    deleted,
+  });
 };
 
 // GET /api/users/lookup?email=...

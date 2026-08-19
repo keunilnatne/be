@@ -14,6 +14,7 @@ async function start() {
     // 신규 컬럼 자동 마이그레이션
     const migrations = [
       "ALTER TABLE users ADD COLUMN country VARCHAR(255) DEFAULT 'South Korea';",
+      "ALTER TABLE users ADD COLUMN lunch_hours VARCHAR(255) DEFAULT '12:00 - 13:00';",
       "ALTER TABLE recipients ADD COLUMN custom_style TEXT;",
       "ALTER TABLE recipients ADD COLUMN preferred_style VARCHAR(255);",
       "ALTER TABLE team_memories ADD COLUMN user_id INT NULL;",

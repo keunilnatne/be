@@ -28,6 +28,7 @@ async function serializeUser(user) {
     language: user.defaultLanguage || 'Korean',
     timezone: user.timezone || 'Asia/Seoul',
     workHours: user.workHours || '09:00 - 18:00',
+    lunchHours: user.lunchHours || '12:00 - 13:00',
     googleConnected: !!user.googleConnected,
     googleEmail: user.googleEmail || '',
     company: user.Company ? { id: user.Company.id, name: user.Company.name } : null,
@@ -81,7 +82,7 @@ exports.update = async (req, res) => {
   const user = await User.findByPk(req.params.userId);
   if (!user) throw ApiError.notFound('사용자를 찾을 수 없습니다.');
 
-  const { name, email, jobRole, jobTitle, position, team, companyId, companyName, tools, preferredStyle, customStyle, defaultLanguage, timezone, workHours, tagIds } = req.body;
+  const { name, email, jobRole, jobTitle, position, team, companyId, companyName, tools, preferredStyle, customStyle, defaultLanguage, timezone, workHours, lunchHours, tagIds } = req.body;
   await user.update({
     ...(name !== undefined && { name }),
     ...(email !== undefined && { email }),
@@ -97,6 +98,7 @@ exports.update = async (req, res) => {
     ...(defaultLanguage !== undefined && { defaultLanguage }),
     ...(timezone !== undefined && { timezone }),
     ...(workHours !== undefined && { workHours }),
+    ...(lunchHours !== undefined && { lunchHours }),
   });
 
   if (Array.isArray(tagIds)) {
@@ -136,6 +138,7 @@ exports.updateMe = async (req, res) => {
     defaultLanguage,
     timezone,
     workHours,
+    lunchHours,
     tagIds,
   } = req.body;
 
@@ -161,6 +164,7 @@ exports.updateMe = async (req, res) => {
     ...(effectiveLanguage !== undefined && { defaultLanguage: effectiveLanguage }),
     ...(timezone !== undefined && { timezone }),
     ...(workHours !== undefined && { workHours }),
+    ...(lunchHours !== undefined && { lunchHours }),
   });
 
   if (Array.isArray(tagIds)) {

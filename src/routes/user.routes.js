@@ -9,6 +9,7 @@ router.get('/me', authMiddleware, userController.getMe);
 router.put('/me', authMiddleware, userController.updateMe);
 router.patch('/me', authMiddleware, userController.updateMe);
 router.delete('/me', authMiddleware, userController.deleteMe);
+router.patch('/me/onboarding', authMiddleware, userController.completeOnboarding);
 router.get('/me/ai-settings', authMiddleware, userController.getAiSettings);
 router.put('/me/ai-settings', authMiddleware, userController.updateAiSettings);
 router.post('/me/reset-personalization', authMiddleware, userController.resetPersonalization);

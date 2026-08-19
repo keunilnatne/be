@@ -18,6 +18,9 @@ async function start() {
       "ALTER TABLE recipients ADD COLUMN custom_style TEXT;",
       "ALTER TABLE recipients ADD COLUMN preferred_style VARCHAR(255);",
       "ALTER TABLE team_memories ADD COLUMN user_id INT NULL;",
+      // Existing accounts keep their current behavior. New accounts are explicitly created with false.
+      "ALTER TABLE users ADD COLUMN onboarding_completed TINYINT(1) NOT NULL DEFAULT 1;",
+      "ALTER TABLE users MODIFY COLUMN onboarding_completed TINYINT(1) NOT NULL DEFAULT 0;",
     ];
     for (const sql of migrations) {
       try {

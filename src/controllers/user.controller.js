@@ -45,6 +45,7 @@ async function serializeUser(user) {
     lunchHours: user.lunchHours || '12:00 - 13:00',
     googleConnected: !!user.googleConnected,
     googleEmail: user.googleEmail || '',
+    onboardingCompleted: !!user.onboardingCompleted,
     company: user.Company ? { id: user.Company.id, name: user.Company.name } : null,
     setting: {
       tone: setting.tone,
@@ -187,6 +188,12 @@ exports.updateMe = async (req, res) => {
 
   const updated = await User.findByPk(user.id, { include: [Company] });
   res.json(await serializeUser(updated));
+};
+
+// PATCH /api/users/me/onboarding
+exports.completeOnboarding = async (req, res) => {
+  await req.user.update({ onboardingCompleted: true });
+  res.json({ onboardingCompleted: true });
 };
 
 // GET /api/users/me/ai-settings

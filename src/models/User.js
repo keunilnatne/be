@@ -31,6 +31,7 @@ User.init(
     lunchHours: { type: DataTypes.STRING, defaultValue: '12:00 - 13:00' },
     googleConnected: { type: DataTypes.BOOLEAN, defaultValue: false },
     googleEmail: { type: DataTypes.STRING },
+    onboardingCompleted: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   },
   { sequelize, modelName: 'User', tableName: 'users' }
 );

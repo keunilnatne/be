@@ -16,6 +16,7 @@ async function serializeUser(user) {
     customStyle: user.customStyle || '',
     accountRole: user.accountRole,
     authProvider: user.authProvider,
+    onboardingCompleted: !!user.onboardingCompleted,
     company: user.Company ? { id: user.Company.id, name: user.Company.name } : null,
     tags: tags.map((tag) => ({
       id: tag.id,

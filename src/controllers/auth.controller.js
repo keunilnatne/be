@@ -35,6 +35,7 @@ function serializeAuthUser(user) {
     timezone: user.timezone || 'Asia/Seoul',
     googleConnected: !!user.googleConnected,
     googleEmail: user.googleEmail || '',
+    onboardingCompleted: !!user.onboardingCompleted,
   };
 }
 
@@ -65,6 +66,7 @@ exports.signup = async (req, res) => {
     team: team || '',
     companyId: companyId || null,
     companyName: companyName || '',
+    onboardingCompleted: false,
   });
 
   try {
@@ -209,6 +211,7 @@ exports.googleCallback = async (req, res) => {
       email: account.googleEmail,
       googleConnected: true,
       googleEmail: account.googleEmail,
+      onboardingCompleted: false,
     });
     await UserSetting.create({ userId: user.id });
   } else {

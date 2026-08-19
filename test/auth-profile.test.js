@@ -128,6 +128,17 @@ test('local auth and profile API flow', async (t) => {
   const authorization = { authorization: `Bearer ${login.body.accessToken}` };
   const profile = await request(baseUrl, '/api/users/me', { headers: authorization });
   assert.equal(profile.status, 200);
+  assert.equal(profile.body.onboardingCompleted, false);
+
+  const completedOnboarding = await request(baseUrl, '/api/users/me/onboarding', {
+    method: 'PATCH',
+    headers: authorization,
+  });
+  assert.equal(completedOnboarding.status, 200);
+  assert.equal(completedOnboarding.body.onboardingCompleted, true);
+
+  const completedProfile = await request(baseUrl, '/api/users/me', { headers: authorization });
+  assert.equal(completedProfile.body.onboardingCompleted, true);
   assert.equal(profile.body.name, '테스트 사용자');
 
   const updatedProfile = await request(baseUrl, '/api/users/me', {

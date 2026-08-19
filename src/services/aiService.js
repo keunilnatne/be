@@ -294,6 +294,68 @@ ${sampleText}
   return Array.isArray(parsed) ? parsed : [];
 }
 
+async function extractSchedule({ subject, body, snippet, from, date }) {
+  const content = body || snippet || '';
+  const nowStr = date ? new Date(date).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+  
+  const prompt = `당신은 업무 이메일에서 회의, 미팅, 마감, 발표 등 일정 정보를 정밀하게 추출하는 전문 AI 비서입니다.
+아래의 이메일을 분석하여 일정이 포함되어 있는지 판별하고, 정확한 정보를 JSON 형식으로만 응답하세요.
+
+[이메일 정보]
+- 메일 제목: ${subject || '(제목 없음)'}
+- 보낸 사람: ${from || '알 수 없음'}
+- 수신 시각: ${nowStr}
+- 본문 내용:
+${content.slice(0, 3000)}
+
+[분석 및 추출 규칙]
+1. hasSchedule:
+   - 본문이나 제목에 구체적인 회의, 미팅, 마감 기한, 세미나, 업무 약속 등 캘린더에 등록할 만한 일정이 포함되어 있으면 true.
+   - 단순 알림, 뉴스레터, 홍보, 인사말, 일정이 전혀 없는 일반 메일인 경우 반드시 false.
+2. quote:
+   - 일정이 있을 경우: 일정/마감과 직결된 본문 속 실제 핵심 문장을 원문 그대로 1~2줄 인용 (따옴표 제외).
+   - 일정이 없을 경우: "".
+3. title:
+   - 일정이 있을 경우: 일정의 성격을 명확하게 나타내는 2~4단어의 깔끔한 제목 (예: "3분기 기획안 마감", "주간 스프린트 회의", "디자인 시안 검토 미팅").
+   - 일정이 없을 경우: "".
+4. dateTime:
+   - 일정이 있을 경우: 메일 수신 시각(${nowStr})을 기준으로 "내일", "다음 주 수요일", "오후 3시" 등의 상대적 표현을 실제 날짜로 계산하여 "M.D 오후 H:MM" 또는 "M.D 오전 H:MM" 형식으로 작성 (예: "8.20 오후 3:00").
+   - 일정이 없을 경우: "".
+5. source: "메일 내용 기반"
+
+반드시 아래 JSON 형식으로만 응답하세요:
+{
+  "hasSchedule": true,
+  "quote": "내일 오후 3시까지 보고서 마감 부탁드릴게요.",
+  "title": "보고서 마감",
+  "dateTime": "8.20 오후 3:00",
+  "source": "메일 내용 기반"
+}`;
+
+  try {
+    const raw = await callGemini(prompt);
+    const parsed = parseJsonResponse(raw);
+    return {
+      hasSchedule: Boolean(parsed.hasSchedule),
+      quote: parsed.quote || '',
+      title: parsed.title || subject || '업무 일정',
+      dateTime: parsed.dateTime || '',
+      source: parsed.source || '메일 내용 기반',
+    };
+  } catch (error) {
+    console.error('[AI extractSchedule error]:', error.message);
+    const scheduleRegex = /(?:내일|오늘|모레|\d{1,2}월\s*\d{1,2}일|\d{1,2}\/\d{1,2}|[월화수목금토일]요일|오전|오후|\d{1,2}시|마감|회의|미팅|일정|까지)/i;
+    const hasMatch = scheduleRegex.test(content);
+    return {
+      hasSchedule: hasMatch,
+      quote: hasMatch ? content.slice(0, 100) : '',
+      title: subject || '업무 일정',
+      dateTime: '일정 확인 필요',
+      source: '메일 내용 기반',
+    };
+  }
+}
+
 module.exports = {
   callGemini,
   parseJsonResponse,
@@ -303,4 +365,5 @@ module.exports = {
   buildQualityPrompt,
   convertMessage,
   inferTags,
+  extractSchedule,
 };

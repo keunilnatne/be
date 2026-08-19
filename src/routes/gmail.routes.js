@@ -16,5 +16,6 @@ router.get('/messages', optionalAuth, gmailController.listInbox);
 router.get('/messages/:messageId', optionalAuth, gmailController.getMessage);
 router.get('/messages/:messageId/attachments/:attachmentId', optionalAuth, gmailController.getAttachment);
 router.post('/send', optionalAuth, gmailController.send);
+router.post('/schedule/extract', optionalAuth, gmailController.extractSchedule);
 
 module.exports = router;

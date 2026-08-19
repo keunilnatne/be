@@ -1,5 +1,6 @@
 const gmailService = require('../services/gmailService');
 const googleAuthService = require('../services/googleAuthService');
+const aiService = require('../services/aiService');
 const ApiError = require('../utils/ApiError');
 
 function getEffectiveUserId(req) {
@@ -92,4 +93,17 @@ exports.send = async (req, res) => {
 
   const result = await gmailService.sendMessage(userId, { to, subject, body });
   res.json({ id: result.id, status: 'sent' });
+};
+
+exports.extractSchedule = async (req, res) => {
+  try {
+    const { subject, body, snippet, from, date } = req.body || {};
+    const result = await aiService.extractSchedule({ subject, body, snippet, from, date });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      hasSchedule: false,
+      message: '일정 분석에 실패했습니다.',
+    });
+  }
 };

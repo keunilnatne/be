@@ -91,4 +91,23 @@ async function getOne({ userId, id }, dependencies = {}) {
   return serialize(result.Message, result);
 }
 
-module.exports = { displayStatus, historyType, serialize, list, getOne };
+async function deleteHistory({ userId, id }, dependencies = {}) {
+  const findResult = dependencies.findResult || MessageResult.findOne.bind(MessageResult);
+  const result = await findResult({
+    where: { id },
+    include: [{ model: Message, where: { senderId: userId }, required: true }],
+  });
+  if (!result) throw ApiError.notFound('삭제할 기록을 찾을 수 없습니다.');
+
+  const messageId = result.messageId;
+  await result.destroy();
+
+  const remaining = await MessageResult.count({ where: { messageId } });
+  if (remaining === 0) {
+    await Message.destroy({ where: { id: messageId } });
+  }
+
+  return { success: true, id };
+}
+
+module.exports = { displayStatus, historyType, serialize, list, getOne, deleteHistory };

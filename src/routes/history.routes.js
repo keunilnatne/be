@@ -6,5 +6,6 @@ const router = Router();
 
 router.get('/', authenticate, historyController.list);
 router.get('/:id', authenticate, historyController.getOne);
+router.delete('/:id', authenticate, historyController.delete);
 
 module.exports = router;

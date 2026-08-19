@@ -25,3 +25,14 @@ exports.getOne = async (req, res) => {
 };
 
 exports.getHistoryDetail = exports.getOne;
+
+// DELETE /api/history/:id
+exports.delete = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw ApiError.badRequest('유효한 이력 ID가 필요합니다.');
+  }
+
+  const result = await historyService.deleteHistory({ userId: req.user.id, id });
+  res.json(result);
+};

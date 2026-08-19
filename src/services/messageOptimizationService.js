@@ -56,6 +56,8 @@ function buildAppliedContext(sender, recipient, companyDna, teamMemories) {
       workHours: sender.workHours || '09:00 - 18:00',
     },
     recipient: {
+      name: recipient.name || '수신자',
+      email: recipient.email || '',
       jobRole: recipient.jobRole,
       company: recipient.company,
       country: recipient.country,

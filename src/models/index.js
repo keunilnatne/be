@@ -13,6 +13,7 @@ const UserSetting = require('./UserSetting');
 const TeamMemory = require('./TeamMemory');
 const GmailIntegration = require('./GmailIntegration');
 const InboxMail = require('./InboxMail');
+const Notice = require('./Notice');
 
 Tag.hasMany(EntityTag, { foreignKey: 'tagId' });
 EntityTag.belongsTo(Tag, { foreignKey: 'tagId' });
@@ -71,5 +72,6 @@ module.exports = {
   TeamMemory,
   GmailIntegration,
   InboxMail,
+  Notice,
 };
 

@@ -12,6 +12,7 @@ const teamMemoryRoutes = require('./teamMemory.routes');
 const historyRoutes = require('./history.routes');
 const dashboardRoutes = require('./dashboard.routes');
 const conversationRoutes = require('./conversation.routes');
+const noticeRoutes = require('./notice.routes');
 
 const router = Router();
 
@@ -43,6 +44,9 @@ router.use('/team-memory', teamMemoryRoutes);
 // FS-008: 히스토리 & 대시보드 통계 API
 router.use('/history', historyRoutes);
 router.use('/dashboard', dashboardRoutes);
+
+// 공지사항 관리 API
+router.use('/notices', noticeRoutes);
 
 module.exports = router;
 

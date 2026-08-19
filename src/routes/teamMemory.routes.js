@@ -4,14 +4,7 @@ const teamMemoryController = require('../controllers/teamMemory.controller');
 
 const router = Router();
 
-const optionalAuth = (req, res, next) => {
-  if (req.headers.authorization) {
-    return authenticate(req, res, next);
-  }
-  next();
-};
-
-router.use(optionalAuth);
+router.use(authenticate);
 
 // 팀 메모리 전체 개요 (패턴 + AI 추천 후보 + 학습 로그)
 router.get('/', (req, res, next) => {

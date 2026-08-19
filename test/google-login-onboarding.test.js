@@ -7,6 +7,12 @@ const googleAuthService = require('../src/services/googleAuthService');
 const googleAccountStore = require('../src/services/googleAccountStore');
 const tokenEncryption = require('../src/services/tokenEncryptionService');
 
+test('Google login state is signed and rejects forged values', () => {
+  const state = googleAuthService.createLoginState();
+  assert.equal(googleAuthService.verifyLoginState(state).purpose, 'google-login');
+  assert.throws(() => googleAuthService.verifyLoginState('guest'));
+});
+
 test('new Google login tells the frontend to restart onboarding', async () => {
   const originals = {
     handleCallback: googleAuthService.handleCallback,
@@ -26,7 +32,11 @@ test('new Google login tells the frontend to restart onboarding', async () => {
     expiryDate: Date.now() + 60_000,
   });
   models.User.findOne = async () => null;
-  models.User.create = async (values) => ({ id: 77, ...values });
+  models.User.create = async (values) => ({
+    id: 77,
+    ...values,
+    async save() { return this; },
+  });
   models.UserSetting.create = async () => ({ userId: 77 });
   googleAccountStore.upsert = async () => ({});
   models.GmailIntegration.findOne = async () => null;

@@ -45,6 +45,8 @@ async function serializeUser(user) {
     lunchHours: user.lunchHours || '12:00 - 13:00',
     googleConnected: !!user.googleConnected,
     googleEmail: user.googleEmail || '',
+    authProvider: user.authProvider || 'local',
+    hasPassword: Boolean(user.password || user.passwordHash),
     onboardingCompleted: !!user.onboardingCompleted,
     company: user.Company ? { id: user.Company.id, name: user.Company.name } : null,
     setting: {
@@ -135,6 +137,7 @@ exports.updateMe = async (req, res) => {
   const user = req.user;
   const {
     name,
+    email,
     role,
     customRole,
     jobRole,
@@ -163,8 +166,21 @@ exports.updateMe = async (req, res) => {
   const effectiveCompanyName = companyName !== undefined ? companyName : company;
   const effectiveLanguage = language !== undefined ? language : defaultLanguage;
 
+  let normalizedEmail;
+  if (email !== undefined) {
+    normalizedEmail = String(email).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      throw ApiError.badRequest('유효한 이메일 주소를 입력해 주세요.');
+    }
+    const duplicate = await User.findOne({
+      where: { email: normalizedEmail, id: { [Op.ne]: user.id } },
+    });
+    if (duplicate) throw ApiError.badRequest('이미 사용 중인 이메일 주소입니다.');
+  }
+
   await user.update({
     ...(name !== undefined && { name }),
+    ...(normalizedEmail !== undefined && { email: normalizedEmail }),
     ...(effectiveJobRole !== undefined && { jobRole: effectiveJobRole }),
     ...(effectiveJobTitle !== undefined && { jobTitle: effectiveJobTitle }),
     ...(effectivePosition !== undefined && { position: effectivePosition }),

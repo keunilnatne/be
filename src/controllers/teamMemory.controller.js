@@ -332,7 +332,9 @@ exports.remove = exports.deletePattern;
 
 // POST /api/team-memory/candidates/:id/approve - AI 추천 후보 승인
 exports.approveCandidate = async (req, res) => {
-  const candidate = await TeamMemory.findByPk(req.params.id);
+  const candidate = await TeamMemory.findOne({
+    where: { id: req.params.id, userId: req.user.id },
+  });
   if (!candidate || candidate.type !== 'candidate') {
     throw ApiError.notFound('AI 추천 후보를 찾을 수 없습니다.');
   }
@@ -341,7 +343,8 @@ exports.approveCandidate = async (req, res) => {
 
   // 새 패턴 등록
   const newPattern = await TeamMemory.create({
-    team: 'default',
+    userId: req.user.id,
+    team: `user-${req.user.id}`,
     type: 'pattern',
     title: `AI 학습 패턴: ${(candidate.suggestion || candidate.title || '신규 패턴').slice(0, 15)}`,
     purpose: candidate.suggestion || candidate.purpose || '',
@@ -351,7 +354,8 @@ exports.approveCandidate = async (req, res) => {
   });
 
   await TeamMemory.create({
-    team: 'default',
+    userId: req.user.id,
+    team: `user-${req.user.id}`,
     type: 'log',
     action: '패턴 학습 완료',
     description: `AI 추천 패턴이 승인되어 팀 메모리에 학습되었습니다.`,
@@ -368,7 +372,9 @@ exports.approve = exports.approveCandidate;
 
 // POST /api/team-memory/candidates/:id/reject - AI 추천 후보 거절
 exports.rejectCandidate = async (req, res) => {
-  const candidate = await TeamMemory.findByPk(req.params.id);
+  const candidate = await TeamMemory.findOne({
+    where: { id: req.params.id, userId: req.user.id },
+  });
   if (!candidate || candidate.type !== 'candidate') {
     throw ApiError.notFound('AI 추천 후보를 찾을 수 없습니다.');
   }
@@ -376,7 +382,8 @@ exports.rejectCandidate = async (req, res) => {
   await candidate.update({ status: 'rejected' });
 
   await TeamMemory.create({
-    team: 'default',
+    userId: req.user.id,
+    team: `user-${req.user.id}`,
     type: 'log',
     action: '패턴 거절',
     description: `AI 추천 패턴이 거절되었습니다.`,

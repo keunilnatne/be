@@ -1,6 +1,7 @@
 const app = require('./app');
 const env = require('./config/env');
 const sequelize = require('./config/database');
+const googleAccountStore = require('./services/googleAccountStore');
 require('./models'); // 모델 로드 및 연관관계 설정
 
 async function start() {
@@ -35,6 +36,13 @@ async function start() {
       }
     }
     console.log('[DB] 신규 컬럼 안전 마이그레이션 완료');
+
+    if (env.google.tokenEncryptionKey) {
+      const gmailMigration = await googleAccountStore.migrateLegacyTokens();
+      console.log(`[DB] Gmail 토큰 암호화 마이그레이션 완료 (변환 ${gmailMigration.migrated}, 재연결 필요 ${gmailMigration.skipped})`);
+    } else if (env.nodeEnv === 'production') {
+      throw new Error('TOKEN_ENCRYPTION_KEY is required in production.');
+    }
 
     app.listen(env.port, () => {
       console.log(`[Server] http://localhost:${env.port} 에서 실행 중`);

@@ -8,7 +8,12 @@ const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
 const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
-const SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/gmail.send'];
+const SCOPES = [
+  'openid',
+  'email',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
+];
 
 function requireConfig() {
   const missing = [
@@ -36,6 +41,11 @@ function verifyState(state) {
   } catch (_error) {
     throw ApiError.badRequest('유효하지 않거나 만료된 Gmail 연결 요청입니다.');
   }
+}
+
+function isConnectionState(state) {
+  const payload = jwt.decode(String(state || ''));
+  return Boolean(payload && payload.purpose === 'gmail-oauth');
 }
 
 function getAuthorizationUrl(userId) {
@@ -146,6 +156,7 @@ async function disconnect(userId) {
 module.exports = {
   getAuthorizationUrl,
   verifyState,
+  isConnectionState,
   connect,
   status,
   disconnect,

@@ -1,10 +1,10 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { User, UserSetting, Company, GmailIntegration } = require('../models');
+const { User, UserSetting, Company } = require('../models');
 const env = require('../config/env');
 const googleAuthService = require('../services/googleAuthService');
 const googleAccountStore = require('../services/googleAccountStore');
-const tokenEncryption = require('../services/tokenEncryptionService');
+const gmailOAuthService = require('../services/gmailOAuthService');
 const ApiError = require('../utils/ApiError');
 const serializeUser = require('../utils/serializeUser');
 
@@ -18,6 +18,22 @@ function generateToken(user) {
   return jwt.sign({ id: user.id, email: user.email, sub: String(user.id) }, env.jwt.secret, {
     expiresIn: env.jwt.expiresIn || '7d',
   });
+}
+
+function gmailConnectionHtml(payload) {
+  const safePayload = JSON.stringify(payload).replace(/</g, '\\u003c');
+  const safeOrigin = JSON.stringify(env.google.frontendOrigin);
+  const isGoogleLogin = String(payload.type || '').startsWith('google-auth');
+  const succeeded = String(payload.type || '').endsWith('success');
+  const title = isGoogleLogin ? 'Google 로그인' : 'Gmail 연결';
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${title}</title></head>
+  <body style="font-family: sans-serif; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0;">
+    <p>${title}${succeeded ? '이 완료되었습니다.' : '에 실패했습니다.'}</p>
+    <script>
+      if (window.opener) window.opener.postMessage(${safePayload}, ${safeOrigin});
+      setTimeout(function () { window.close(); }, 400);
+    </script>
+  </body></html>`;
 }
 
 function serializeAuthUser(user) {
@@ -130,7 +146,11 @@ exports.changePassword = async (req, res) => {
   const user = req.user;
   const currentPassword = user.password || user.passwordHash;
 
-  if (oldPassword && currentPassword) {
+  if (currentPassword && !oldPassword) {
+    throw ApiError.badRequest('기존 비밀번호를 입력해 주세요.');
+  }
+
+  if (currentPassword) {
     const isMatch = await bcrypt.compare(oldPassword, currentPassword);
     if (!isMatch) {
       throw ApiError.badRequest('기존 비밀번호가 일치하지 않습니다.');
@@ -148,8 +168,8 @@ exports.changePassword = async (req, res) => {
 
 // GET /api/auth/google
 exports.googleAuthUrl = async (req, res) => {
-  const { userId, format } = req.query;
-  const url = googleAuthService.getAuthUrl(userId || 'guest');
+  const { format } = req.query;
+  const url = googleAuthService.getAuthUrl();
   if (format === 'json' || req.headers.accept?.includes('application/json')) {
     return res.json({ url });
   }
@@ -159,7 +179,31 @@ exports.googleAuthUrl = async (req, res) => {
 // GET /api/auth/google/callback
 exports.googleCallback = async (req, res) => {
   const { code, state } = req.query;
-  if (!code) throw ApiError.badRequest('code가 필요합니다.');
+
+  if (gmailOAuthService.isConnectionState(state)) {
+    try {
+      if (req.query.error) throw ApiError.badRequest('Google에서 Gmail 연결을 취소했습니다.');
+      const integration = await gmailOAuthService.connect({ state, code });
+      return res.type('html').send(gmailConnectionHtml({
+        type: 'gmail-auth-success',
+        email: integration.googleEmail,
+      }));
+    } catch (error) {
+      return res.status(error.statusCode || 400).type('html').send(gmailConnectionHtml({
+        type: 'gmail-auth-error',
+        message: error.message || 'Gmail 연결에 실패했습니다.',
+      }));
+    }
+  }
+
+  if (req.query.error || !code) {
+    return res.status(400).type('html').send(gmailConnectionHtml({
+      type: 'google-auth-error',
+      message: req.query.error
+        ? 'Google 로그인이 취소되었습니다.'
+        : 'Google 인증 코드가 없습니다. 다시 로그인해 주세요.',
+    }));
+  }
 
   let account;
   try {
@@ -193,7 +237,7 @@ exports.googleCallback = async (req, res) => {
   <script>
     try {
       if (window.opener) {
-        window.opener.postMessage({ type: 'google-auth-error', error: '인증 세션이 만료되었습니다. 다시 로그인해 주세요.' }, window.location.origin);
+        window.opener.postMessage({ type: 'google-auth-error', message: '인증 세션이 만료되었습니다. 다시 로그인해 주세요.' }, ${JSON.stringify(env.google.frontendOrigin)});
       }
     } catch (e) {}
   </script>
@@ -209,47 +253,37 @@ exports.googleCallback = async (req, res) => {
     user = await User.create({
       name: account.googleEmail.split('@')[0],
       email: account.googleEmail,
-      googleConnected: true,
+      googleConnected: false,
       googleEmail: account.googleEmail,
       onboardingCompleted: false,
     });
     await UserSetting.create({ userId: user.id });
   } else {
-    user.googleConnected = true;
     user.googleEmail = account.googleEmail;
-    await user.save();
   }
 
-  // Google OAuth 계정 스토어 및 GmailIntegration 즉시 연동
+  // GmailIntegration에는 refresh token만 AES-256-GCM으로 저장한다.
   try {
     await googleAccountStore.upsert(user.id, {
       googleEmail: account.googleEmail,
       accessToken: account.accessToken,
       refreshToken: account.refreshToken,
       expiryDate: account.expiryDate,
+      scopes: account.scopes,
     });
-
-    const rawToken = account.refreshToken || account.accessToken || 'google-token';
-    const encryptedRefreshToken = tokenEncryption.encrypt(rawToken);
-    const existingIntegration = await GmailIntegration.findOne({ where: { userId: user.id } });
-    if (existingIntegration) {
-      existingIntegration.googleEmail = account.googleEmail;
-      existingIntegration.encryptedRefreshToken = encryptedRefreshToken;
-      existingIntegration.scopes = ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send'];
-      existingIntegration.connectedAt = new Date();
-      await existingIntegration.save();
-    } else {
-      await GmailIntegration.create({
-        userId: user.id,
-        googleEmail: account.googleEmail,
-        encryptedRefreshToken,
-        scopes: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send'],
-        connectedAt: new Date(),
-      });
-    }
   } catch (syncErr) {
-    console.warn('[Google Gmail integration auto-sync warn]:', syncErr.message);
+    user.googleConnected = false;
+    await user.save();
+    console.error('[Google Gmail integration sync error]:', syncErr.message);
+    return res.status(500).type('html').send(gmailConnectionHtml({
+      type: 'google-auth-error',
+      message: 'Google 계정 정보를 안전하게 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    }));
   }
+
+  user.googleConnected = true;
+  user.googleEmail = account.googleEmail;
+  await user.save();
 
   const token = generateToken(user);
   const frontendUrl = process.env.FRONTEND_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -279,7 +313,7 @@ exports.googleCallback = async (req, res) => {
           email: ${JSON.stringify(email || '')},
           token: ${JSON.stringify(token || '')},
           isNewUser: ${JSON.stringify(isNewUser)}
-        }, '*');
+        }, ${JSON.stringify(frontendUrl)});
         setTimeout(() => {
           window.close();
         }, 500);
@@ -294,47 +328,4 @@ exports.googleCallback = async (req, res) => {
 </html>
   `);
 };
-
-// GET /api/auth/google/success
-exports.googleSuccess = async (req, res) => {
-  const { email, token } = req.query;
-  res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Google 로그인 완료</title>
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc;">
-  <div style="text-align: center; background: white; padding: 32px 40px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);">
-    <div style="width: 48px; height: 48px; background: #e0e7ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4338ca" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-    </div>
-    <h3 style="color: #1e1b4b; margin: 0 0 8px 0; font-size: 18px; font-weight: 700;">Google 계정 로그인 성공</h3>
-    <p style="color: #64748b; font-size: 14px; margin: 0 0 16px 0;">로그인이 완료되었습니다. 창이 자동으로 닫힙니다.</p>
-    <p style="color: #94a3b8; font-size: 12px; margin: 0;">${email || ''}</p>
-  </div>
-  <script>
-    try {
-      if (window.opener) {
-        window.opener.postMessage({
-          type: 'google-auth-success',
-          email: ${JSON.stringify(email || '')},
-          token: ${JSON.stringify(token || '')}
-        }, '*');
-        setTimeout(() => {
-          window.close();
-        }, 500);
-      } else {
-        window.location.href = '/welcome';
-      }
-    } catch (e) {
-      window.location.href = '/welcome';
-    }
-  </script>
-</body>
-</html>
-  `);
-};
-
 

@@ -481,13 +481,16 @@ exports.convert = async (req, res) => {
     throw ApiError.badRequest('originalText, recipientId는 필수입니다.');
   }
 
-  const recipient = await Recipient.findByPk(recipientId);
+  const recipient = await Recipient.findOne({
+    where: { id: recipientId, ownerUserId: req.user.id },
+  });
   if (!recipient) throw ApiError.notFound('수신자를 찾을 수 없습니다.');
 
   let sender = null;
-  if (senderId) {
-    sender = await User.findByPk(senderId);
+  if (senderId && Number(senderId) !== Number(req.user.id)) {
+    throw ApiError.forbidden('다른 사용자를 발신자로 지정할 수 없습니다.');
   }
+  sender = req.user;
 
   const tags = await tagService.getTagsForEntity('recipient', recipientId);
 
@@ -509,7 +512,8 @@ exports.convert = async (req, res) => {
 };
 
 exports.getOne = async (req, res) => {
-  const message = await Message.findByPk(req.params.messageId, {
+  const message = await Message.findOne({
+    where: { id: req.params.messageId, senderId: req.user.id },
     include: [{ model: MessageResult, as: 'results' }],
   });
   if (!message) throw ApiError.notFound('메시지를 찾을 수 없습니다.');
@@ -520,7 +524,9 @@ exports.saveRevision = async (req, res) => {
   const { messageId } = req.params;
   const { finalSubject, finalBody } = req.body;
 
-  const result = await MessageResult.findOne({ where: { messageId } });
+  const message = await Message.findOne({ where: { id: messageId, senderId: req.user.id } });
+  if (!message) throw ApiError.notFound('메시지를 찾을 수 없습니다.');
+  const result = await MessageResult.findOne({ where: { messageId: message.id } });
   if (!result) throw ApiError.notFound('변환 결과를 찾을 수 없습니다.');
 
   await result.update({
@@ -642,11 +648,17 @@ exports.deleteDraft = async (req, res) => {
 exports.createDraft = exports.saveDraft;
 
 exports.analyzeContext = async (req, res) => {
+  const message = await Message.findOne({
+    where: { id: req.params.messageId, senderId: req.user.id },
+  });
+  if (!message) throw ApiError.notFound('메시지를 찾을 수 없습니다.');
   res.json({ questions: [] });
 };
 
 exports.analyzeQuality = async (req, res) => {
   const messageId = Number(req.params.messageId);
+  const message = await Message.findOne({ where: { id: messageId, senderId: req.user.id } });
+  if (!message) throw ApiError.notFound('메시지를 찾을 수 없습니다.');
   if (messageId && messageQualityService?.analyze && req.user?.id) {
     try {
       const outcomes = await messageQualityService.analyze({

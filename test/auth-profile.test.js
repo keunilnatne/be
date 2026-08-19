@@ -22,6 +22,9 @@ function installModelFakes() {
         Object.assign(this, updates);
         return this;
       },
+      async save() {
+        return this;
+      },
     };
     return storedUser;
   };
@@ -125,7 +128,62 @@ test('local auth and profile API flow', async (t) => {
   const unauthorizedHistory = await request(baseUrl, '/api/history');
   assert.equal(unauthorizedHistory.status, 401);
 
+  for (const protectedPath of [
+    '/api/users',
+    '/api/messages/drafts',
+    '/api/team-memory',
+    '/api/tags',
+    '/api/notices',
+    '/api/company-dna',
+  ]) {
+    const response = await request(baseUrl, protectedPath);
+    assert.equal(response.status, 401, `${protectedPath} must require authentication`);
+  }
+
   const authorization = { authorization: `Bearer ${login.body.accessToken}` };
+
+  const forbiddenUserList = await request(baseUrl, '/api/users', { headers: authorization });
+  assert.equal(forbiddenUserList.status, 403);
+
+  const forbiddenCompanyList = await request(baseUrl, '/api/companies/list', { headers: authorization });
+  assert.equal(forbiddenCompanyList.status, 403);
+
+  const forbiddenOtherCompany = await request(baseUrl, '/api/company-dna/2/dna', { headers: authorization });
+  assert.equal(forbiddenOtherCompany.status, 403);
+
+  const missingOldPassword = await request(baseUrl, '/api/auth/password', {
+    method: 'PUT',
+    headers: authorization,
+    body: JSON.stringify({ newPassword: 'new-password-123' }),
+  });
+  assert.equal(missingOldPassword.status, 400);
+
+  const wrongOldPassword = await request(baseUrl, '/api/auth/password', {
+    method: 'PUT',
+    headers: authorization,
+    body: JSON.stringify({ oldPassword: 'wrong-password', newPassword: 'new-password-123' }),
+  });
+  assert.equal(wrongOldPassword.status, 400);
+
+  const changedPassword = await request(baseUrl, '/api/auth/password', {
+    method: 'PUT',
+    headers: authorization,
+    body: JSON.stringify({ oldPassword: 'password123', newPassword: 'new-password-123' }),
+  });
+  assert.equal(changedPassword.status, 200);
+
+  const oldPasswordLogin = await request(baseUrl, '/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: 'user@example.com', password: 'password123' }),
+  });
+  assert.equal(oldPasswordLogin.status, 401);
+
+  const newPasswordLogin = await request(baseUrl, '/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: 'user@example.com', password: 'new-password-123' }),
+  });
+  assert.equal(newPasswordLogin.status, 200);
+
   const profile = await request(baseUrl, '/api/users/me', { headers: authorization });
   assert.equal(profile.status, 200);
   assert.equal(profile.body.onboardingCompleted, false);

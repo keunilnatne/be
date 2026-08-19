@@ -1,4 +1,6 @@
 const { google } = require('googleapis');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const env = require('../config/env');
 const googleAccountStore = require('./googleAccountStore');
 
@@ -24,18 +26,40 @@ function createOAuth2Client() {
 }
 
 // 사용자를 Google 동의 화면으로 보낼 URL 생성. state에 userId를 실어서 콜백에서 매칭.
-function getAuthUrl(userId) {
+function createLoginState() {
+  return jwt.sign(
+    { purpose: 'google-login' },
+    env.jwt.secret,
+    { expiresIn: '10m', jwtid: crypto.randomUUID() }
+  );
+}
+
+function verifyLoginState(state) {
+  try {
+    const payload = jwt.verify(state, env.jwt.secret);
+    if (payload.purpose !== 'google-login') throw new Error('wrong purpose');
+    return payload;
+  } catch {
+    const error = new Error('유효하지 않거나 만료된 Google 로그인 요청입니다.');
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+function getAuthUrl() {
   const client = createOAuth2Client();
   return client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
     scope: SCOPES,
-    state: String(userId),
+    state: createLoginState(),
   });
 }
 
-// 콜백에서 받은 code를 토큰으로 교환하고, 어떤 Google 계정인지 확인해 DB에 보관.
-async function handleCallback(code, userId) {
+// 콜백에서 받은 code를 토큰으로 교환하고 Google 계정 정보를 반환한다.
+// 계정 생성과 암호화 저장은 컨트롤러에서 사용자 ID를 확정한 뒤 수행한다.
+async function handleCallback(code, state) {
+  verifyLoginState(state);
   const client = createOAuth2Client();
   const { tokens } = await client.getToken(code);
   client.setCredentials(tokens);
@@ -43,14 +67,13 @@ async function handleCallback(code, userId) {
   const oauth2 = google.oauth2({ version: 'v2', auth: client });
   const { data: profile } = await oauth2.userinfo.get();
 
-  const existingAccount = await googleAccountStore.getByUserId(userId);
-
-  return googleAccountStore.upsert(userId, {
+  return {
     googleEmail: profile.email,
     accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token || existingAccount?.refreshToken,
+    refreshToken: tokens.refresh_token || null,
     expiryDate: tokens.expiry_date || null,
-  });
+    scopes: tokens.scope ? String(tokens.scope).split(' ').filter(Boolean) : SCOPES,
+  };
 }
 
 // 저장된 토큰으로 인증된 OAuth2 클라이언트 생성. 토큰이 갱신되면 DB에 다시 기록.
@@ -70,10 +93,13 @@ async function getAuthorizedClientForUser(userId) {
   });
 
   client.on('tokens', (tokens) => {
-    googleAccountStore.upsert(userId, {
+    void googleAccountStore.upsert(userId, {
+      googleEmail: account.googleEmail,
       accessToken: tokens.access_token || account.accessToken,
       refreshToken: tokens.refresh_token || account.refreshToken,
       expiryDate: tokens.expiry_date || account.expiryDate,
+    }).catch((error) => {
+      console.error('[Google token refresh persistence error]:', error.message);
     });
   });
 
@@ -85,4 +111,12 @@ async function getStatus(userId) {
   return { connected: Boolean(account), email: account?.googleEmail || null };
 }
 
-module.exports = { getAuthUrl, handleCallback, getAuthorizedClientForUser, getStatus };
+module.exports = {
+  SCOPES,
+  createLoginState,
+  verifyLoginState,
+  getAuthUrl,
+  handleCallback,
+  getAuthorizedClientForUser,
+  getStatus,
+};

@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const companyController = require('../controllers/company.controller');
 const authMiddleware = require('../middlewares/auth');
+const { requireCompanyAccess, requireRole } = require('../middlewares/authorize');
 
 const router = Router();
 
@@ -21,23 +22,17 @@ const upload = multer({
   },
 });
 
-const optionalAuth = (req, res, next) => {
-  if (req.headers.authorization || req.get('authorization')) {
-    return authMiddleware(req, res, next);
-  }
-  next();
-};
-
 // 기존 CRUD
-router.get('/', optionalAuth, companyController.getDna);
-router.put('/', optionalAuth, companyController.updateDna);
-router.get('/list', companyController.list);
-router.post('/list', companyController.create);
-router.get('/:companyId/dna', optionalAuth, companyController.getDna);
-router.put('/:companyId/dna', optionalAuth, companyController.updateDna);
+router.use(authMiddleware);
+router.get('/', companyController.getDna);
+router.put('/', companyController.updateDna);
+router.get('/list', requireRole('admin'), companyController.list);
+router.post('/list', requireRole('admin'), companyController.create);
+router.get('/:companyId/dna', requireCompanyAccess, companyController.getDna);
+router.put('/:companyId/dna', requireCompanyAccess, companyController.updateDna);
 
 // Company DNA 자동 추출
 router.post('/extract/file', upload.single('file'), companyController.extractFromFile);
-router.post('/extract/gmail', authMiddleware, companyController.extractFromGmail);
+router.post('/extract/gmail', companyController.extractFromGmail);
 
 module.exports = router;

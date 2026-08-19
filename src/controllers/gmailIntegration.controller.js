@@ -16,7 +16,7 @@ exports.connect = async (req, res) => {
 
 exports.callback = async (req, res) => {
   if (req.query.error) {
-    return res.status(400).send(callbackHtml({ type: 'gmail-auth-error', error: req.query.error }));
+    return res.status(400).send(callbackHtml({ type: 'gmail-auth-error', message: 'Google에서 Gmail 연결을 취소했습니다.' }));
   }
   const integration = await gmailOAuthService.connect({
     state: req.query.state,

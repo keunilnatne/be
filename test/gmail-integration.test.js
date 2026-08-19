@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const env = require('../src/config/env');
 const tokenEncryption = require('../src/services/tokenEncryptionService');
 const gmailOAuthService = require('../src/services/gmailOAuthService');
+const googleAccountStore = require('../src/services/googleAccountStore');
 const controller = require('../src/controllers/gmailIntegration.controller');
 
 test.before(() => {
@@ -24,6 +25,53 @@ test('refresh token encryption round-trip does not expose plaintext', () => {
 test('encrypted token rejects tampering', () => {
   const encrypted = tokenEncryption.encrypt('refresh-token-value');
   assert.throws(() => tokenEncryption.decrypt(`${encrypted}broken`));
+});
+
+test('legacy Gmail token rows are migrated without exposing plaintext', async () => {
+  const { GmailIntegration } = require('../src/models');
+  const originalFindAll = GmailIntegration.findAll;
+  let updatedValues;
+  GmailIntegration.findAll = async () => [{
+    encryptedRefreshToken: JSON.stringify({
+      accessToken: 'legacy-access',
+      refreshToken: 'legacy-refresh',
+      expiryDate: 123,
+    }),
+    scopes: [],
+    async update(values) { updatedValues = values; },
+  }];
+
+  try {
+    const result = await googleAccountStore.migrateLegacyTokens();
+    assert.deepEqual(result, { migrated: 1, skipped: 0, total: 1 });
+    assert.ok(updatedValues.encryptedRefreshToken.startsWith('v1:'));
+    assert.equal(updatedValues.encryptedRefreshToken.includes('legacy-refresh'), false);
+    assert.equal(tokenEncryption.decrypt(updatedValues.encryptedRefreshToken), 'legacy-refresh');
+    assert.ok(updatedValues.scopes.includes('https://www.googleapis.com/auth/gmail.readonly'));
+  } finally {
+    GmailIntegration.findAll = originalFindAll;
+  }
+});
+
+test('token refresh preserves the existing Gmail identity and refresh token', async () => {
+  const { GmailIntegration } = require('../src/models');
+  const originalFindOne = GmailIntegration.findOne;
+  const existing = {
+    googleEmail: 'owner@example.com',
+    encryptedRefreshToken: tokenEncryption.encrypt('stable-refresh-token'),
+    scopes: gmailOAuthService.SCOPES,
+    async update(values) { Object.assign(this, values); },
+  };
+  GmailIntegration.findOne = async () => existing;
+
+  try {
+    await googleAccountStore.upsert(17, { accessToken: 'rotated-access-token' });
+    assert.equal(existing.googleEmail, 'owner@example.com');
+    assert.equal(tokenEncryption.decrypt(existing.encryptedRefreshToken), 'stable-refresh-token');
+    assert.equal(existing.encryptedRefreshToken.includes('stable-refresh-token'), false);
+  } finally {
+    GmailIntegration.findOne = originalFindOne;
+  }
 });
 
 test('authorization URL has offline Gmail send scope and signed state', () => {

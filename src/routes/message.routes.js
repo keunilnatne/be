@@ -4,13 +4,6 @@ const authenticate = require('../middlewares/auth');
 
 const router = Router();
 
-const optionalAuth = (req, res, next) => {
-  if (req.headers.authorization) {
-    return authenticate(req, res, next);
-  }
-  next();
-};
-
 // 다중 수신자 AI 최적화 및 발송
 router.post('/optimize', authenticate, messageController.optimizeAuthenticated);
 router.post('/send', authenticate, messageController.sendAuthenticated);
@@ -21,11 +14,11 @@ router.post('/drafts', authenticate, messageController.saveDraft);
 router.delete('/drafts/:draftId', authenticate, messageController.deleteDraft);
 
 // 초안 및 단일 변환 엔드포인트
-router.post('/', optionalAuth, messageController.saveDraft);
-router.post('/convert', optionalAuth, messageController.convert);
-router.post('/:messageId/analyze-context', optionalAuth, messageController.analyzeContext);
-router.post('/:messageId/analyze-quality', optionalAuth, messageController.analyzeQuality);
-router.get('/:messageId', optionalAuth, messageController.getOne);
-router.post('/:messageId/revisions', optionalAuth, messageController.saveRevision);
+router.post('/', authenticate, messageController.saveDraft);
+router.post('/convert', authenticate, messageController.convert);
+router.post('/:messageId/analyze-context', authenticate, messageController.analyzeContext);
+router.post('/:messageId/analyze-quality', authenticate, messageController.analyzeQuality);
+router.get('/:messageId', authenticate, messageController.getOne);
+router.post('/:messageId/revisions', authenticate, messageController.saveRevision);
 
 module.exports = router;

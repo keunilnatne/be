@@ -1,7 +1,10 @@
 const { Router } = require('express');
 const noticeController = require('../controllers/notice.controller');
+const authenticate = require('../middlewares/authenticate');
 
 const router = Router();
+
+router.use(authenticate);
 
 // 공지사항 목록 조회 (공개)
 router.get('/', noticeController.list);

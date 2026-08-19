@@ -249,9 +249,45 @@ exports.googleCallback = async (req, res) => {
 
   const token = generateToken(user);
   const frontendUrl = process.env.FRONTEND_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173';
+  const email = account.googleEmail;
 
-  // 프론트엔드의 프록시 경로로 리다이렉트하여 postMessage 발송
-  res.redirect(`${frontendUrl}/api/auth/google/success?email=${encodeURIComponent(account.googleEmail)}&token=${encodeURIComponent(token)}`);
+  return res.type('html').send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Google 로그인 완료</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc;">
+  <div style="text-align: center; background: white; padding: 32px 40px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);">
+    <div style="width: 48px; height: 48px; background: #e0e7ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4338ca" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+    <h3 style="color: #1e1b4b; margin: 0 0 8px 0; font-size: 18px; font-weight: 700;">Google 계정 로그인 성공</h3>
+    <p style="color: #64748b; font-size: 14px; margin: 0 0 16px 0;">로그인이 완료되었습니다. 창이 자동으로 닫힙니다.</p>
+    <p style="color: #94a3b8; font-size: 12px; margin: 0;">${email || ''}</p>
+  </div>
+  <script>
+    try {
+      if (window.opener) {
+        window.opener.postMessage({
+          type: 'google-auth-success',
+          email: ${JSON.stringify(email || '')},
+          token: ${JSON.stringify(token || '')}
+        }, '*');
+        setTimeout(() => {
+          window.close();
+        }, 500);
+      } else {
+        window.location.href = '${frontendUrl}/welcome';
+      }
+    } catch (e) {
+      window.location.href = '${frontendUrl}/welcome';
+    }
+  </script>
+</body>
+</html>
+  `);
 };
 
 // GET /api/auth/google/success

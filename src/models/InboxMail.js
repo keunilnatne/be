@@ -24,15 +24,6 @@ InboxMail.init(
     sequelize,
     modelName: 'InboxMail',
     tableName: 'inbox_mails',
-    indexes: [
-      {
-        unique: true,
-        fields: ['userId', 'gmailMessageId'],
-      },
-      {
-        fields: ['userId', 'internalDate'],
-      },
-    ],
   }
 );
 

@@ -279,6 +279,96 @@ ${sampleText}
   return Array.isArray(parsed) ? parsed : [];
 }
 
+function cleanText(value, maxLength = 200) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function cleanStringArray(value, maxItems = 8, maxLength = 120) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value
+    .map((item) => cleanText(item, maxLength))
+    .filter(Boolean)))
+    .slice(0, maxItems);
+}
+
+async function analyzeRecipientProfile(recipient, generate = callGemini) {
+  const safeRecipient = {
+    name: cleanText(recipient?.name, 80),
+    jobRole: cleanText(recipient?.jobRole || recipient?.position || recipient?.role, 120),
+    company: cleanText(recipient?.company, 120),
+    country: cleanText(recipient?.country, 80),
+    language: cleanText(recipient?.language, 40),
+    relationship: cleanText(recipient?.relationship || recipient?.organizationRelation, 80),
+    preferredStyle: cleanText(recipient?.preferredStyle, 200),
+    customStyle: cleanText(recipient?.customStyle, 500),
+    communicationStyle: cleanStringArray(recipient?.communicationStyle, 8, 80),
+  };
+  const prompt = `당신은 업무 커뮤니케이션 프로필 분석 AI입니다.
+아래 수신자 정보를 근거로만 분석하고, 입력에 없는 개인정보나 사실을 추측하지 마세요.
+
+[수신자]
+${JSON.stringify(safeRecipient, null, 2)}
+
+반드시 JSON만 출력하세요:
+{"tags":["커뮤니케이션 성향"],"terms":["자주 사용할 가능성이 높은 업무 용어"],"rules":["권장 소통 규칙"],"tone":"권장 어조","style":"권장 문체","emoji":"대표 이모지 1개"}`;
+  const parsed = parseJsonResponse(await generate(prompt));
+  const result = {
+    tags: cleanStringArray(parsed.tags),
+    terms: cleanStringArray(parsed.terms),
+    rules: cleanStringArray(parsed.rules, 8, 200),
+    tone: cleanText(parsed.tone, 80),
+    style: cleanText(parsed.style, 80),
+    emoji: cleanText(parsed.emoji, 8),
+  };
+  if (!result.tags.length && !result.terms.length && !result.rules.length) {
+    throw aiFailure(502, 'INVALID_AI_JSON');
+  }
+  return result;
+}
+
+async function analyzeMessageMetadata(input, generate = callGemini) {
+  const safeInput = {
+    sender: {
+      jobRole: cleanText(input?.sender?.jobRole, 120),
+      defaultLanguage: cleanText(input?.sender?.defaultLanguage, 40),
+    },
+    recipients: (input?.recipients || []).slice(0, 3).map((recipient) => ({
+      jobRole: cleanText(recipient?.jobRole || recipient?.position || recipient?.role, 120),
+      language: cleanText(recipient?.language, 40),
+      relationship: cleanText(recipient?.relationship || recipient?.organizationRelation, 80),
+      communicationStyle: cleanStringArray(recipient?.communicationStyle, 8, 80),
+    })),
+    subject: cleanText(input?.subject, 500),
+    body: String(input?.body || '').trim().slice(0, 10000),
+    sourceLanguage: cleanText(input?.sourceLanguage, 40),
+    targetLanguages: cleanStringArray(input?.targetLanguages, 3, 40),
+  };
+  const prompt = `당신은 비즈니스 메시지 메타데이터 분석 AI입니다.
+아래 입력을 분석하되 원문을 수정하지 말고, 입력에 없는 사실을 만들지 마세요.
+
+[입력]
+${JSON.stringify(safeInput, null, 2)}
+
+priority는 HIGH, NORMAL, LOW 중 하나여야 합니다.
+반드시 JSON만 출력하세요:
+{"priority":"NORMAL","tags":["업무 태그"],"terms":["핵심 용어"],"rules":["적용할 소통 규칙"],"sourceLanguage":"Korean","targetLanguage":"English"}`;
+  const parsed = parseJsonResponse(await generate(prompt));
+  const priority = cleanText(parsed.priority, 10).toUpperCase();
+  const result = {
+    priority: ['HIGH', 'NORMAL', 'LOW'].includes(priority) ? priority : 'NORMAL',
+    tags: cleanStringArray(parsed.tags),
+    terms: cleanStringArray(parsed.terms),
+    rules: cleanStringArray(parsed.rules, 8, 200),
+    sourceLanguage: cleanText(parsed.sourceLanguage, 40),
+    targetLanguage: cleanText(parsed.targetLanguage, 40),
+  };
+  if (!result.tags.length && !result.terms.length && !result.rules.length
+    && !result.sourceLanguage && !result.targetLanguage) {
+    throw aiFailure(502, 'INVALID_AI_JSON');
+  }
+  return result;
+}
+
 function stripHtml(html) {
   if (!html) return '';
   return html
@@ -367,5 +457,7 @@ module.exports = {
   buildQualityPrompt,
   convertMessage,
   inferTags,
+  analyzeRecipientProfile,
+  analyzeMessageMetadata,
   extractSchedule,
 };

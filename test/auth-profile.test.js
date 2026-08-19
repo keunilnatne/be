@@ -1,8 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { User, Company, UserSetting, Notice } = require('../src/models');
+const { User, Company, UserSetting, Notice, Recipient } = require('../src/models');
 const tagService = require('../src/services/tagService');
+const aiService = require('../src/services/aiService');
 
 let storedUser = null;
 
@@ -25,6 +26,9 @@ function installModelFakes() {
       async save() {
         return this;
       },
+      get() {
+        return { ...this };
+      },
     };
     return storedUser;
   };
@@ -44,6 +48,30 @@ function installModelFakes() {
     ...values,
     createdAt: new Date(),
     updatedAt: new Date(),
+  });
+  Recipient.findOne = async ({ where }) => (
+    Number(where.id) === 7 && Number(where.ownerUserId) === 1
+      ? {
+        id: 7,
+        ownerUserId: 1,
+        name: 'Alex',
+        language: 'English',
+        get() { return { ...this }; },
+      }
+      : null
+  );
+  aiService.analyzeRecipientProfile = async () => ({
+    tags: ['concise'],
+    terms: ['deadline'],
+    rules: ['state the deadline'],
+  });
+  aiService.analyzeMessageMetadata = async () => ({
+    priority: 'NORMAL',
+    tags: ['request'],
+    terms: ['deadline'],
+    rules: ['be concise'],
+    sourceLanguage: 'Korean',
+    targetLanguage: 'English',
   });
   tagService.getTagsForEntity = async () => [];
   tagService.setTagsForEntity = async () => [];
@@ -136,6 +164,12 @@ test('local auth and profile API flow', async (t) => {
   const unauthorizedDashboard = await request(baseUrl, '/api/dashboard/summary');
   assert.equal(unauthorizedDashboard.status, 401);
 
+  const unauthorizedAiAnalysis = await request(baseUrl, '/api/ai/recipients/analyze', {
+    method: 'POST',
+    body: JSON.stringify({ recipient: { id: 7 } }),
+  });
+  assert.equal(unauthorizedAiAnalysis.status, 401);
+
   const unauthorizedRecipients = await request(baseUrl, '/api/recipients');
   assert.equal(unauthorizedRecipients.status, 401);
 
@@ -157,6 +191,26 @@ test('local auth and profile API flow', async (t) => {
 
   const forbiddenUserList = await request(baseUrl, '/api/users', { headers: authorization });
   assert.equal(forbiddenUserList.status, 403);
+
+  const recipientAnalysis = await request(baseUrl, '/api/ai/recipients/analyze', {
+    method: 'POST',
+    headers: authorization,
+    body: JSON.stringify({ recipient: { id: 7 } }),
+  });
+  assert.equal(recipientAnalysis.status, 200);
+  assert.deepEqual(recipientAnalysis.body.tags, ['concise']);
+
+  const messageMetadata = await request(baseUrl, '/api/ai/messages/metadata', {
+    method: 'POST',
+    headers: authorization,
+    body: JSON.stringify({
+      recipients: [{ id: 7 }],
+      subject: '검토 요청',
+      body: '내일까지 검토해 주세요.',
+    }),
+  });
+  assert.equal(messageMetadata.status, 200);
+  assert.equal(messageMetadata.body.priority, 'NORMAL');
 
   const removedCompanyDna = await request(baseUrl, '/api/company-dna', { headers: authorization });
   assert.equal(removedCompanyDna.status, 404);

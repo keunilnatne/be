@@ -37,3 +37,41 @@ test('AI errors use the frontend-safe common error response', () => {
     },
   });
 });
+
+test('recipient AI analysis accepts only the expected structured fields', async () => {
+  const result = await aiService.analyzeRecipientProfile(
+    { name: 'Alex', language: 'English', communicationStyle: ['concise'] },
+    async () => JSON.stringify({
+      tags: ['concise', 'concise'],
+      terms: ['deadline'],
+      rules: ['state the deadline'],
+      tone: 'professional',
+      style: 'brief',
+      emoji: '💬',
+      ignored: 'not exposed',
+    })
+  );
+
+  assert.deepEqual(result.tags, ['concise']);
+  assert.deepEqual(result.terms, ['deadline']);
+  assert.deepEqual(result.rules, ['state the deadline']);
+  assert.equal(result.ignored, undefined);
+});
+
+test('message metadata normalizes priority and structured arrays', async () => {
+  const result = await aiService.analyzeMessageMetadata(
+    { subject: 'Review', body: 'Please review by Friday.' },
+    async () => JSON.stringify({
+      priority: 'high',
+      tags: ['review'],
+      terms: ['Friday'],
+      rules: ['be concise'],
+      sourceLanguage: 'English',
+      targetLanguage: 'Korean',
+    })
+  );
+
+  assert.equal(result.priority, 'HIGH');
+  assert.deepEqual(result.tags, ['review']);
+  assert.equal(result.targetLanguage, 'Korean');
+});

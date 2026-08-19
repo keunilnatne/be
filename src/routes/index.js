@@ -12,6 +12,7 @@ const historyRoutes = require('./history.routes');
 const dashboardRoutes = require('./dashboard.routes');
 const conversationRoutes = require('./conversation.routes');
 const noticeRoutes = require('./notice.routes');
+const aiRoutes = require('./ai.routes');
 
 const router = Router();
 
@@ -42,6 +43,9 @@ router.use('/dashboard', dashboardRoutes);
 
 // 공지사항 관리 API
 router.use('/notices', noticeRoutes);
+
+// 화면의 보조 AI 분석 API
+router.use('/ai', aiRoutes);
 
 module.exports = router;
 

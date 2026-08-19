@@ -7,6 +7,7 @@ class TeamMemory extends Model {}
 TeamMemory.init(
   {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    userId: { type: DataTypes.INTEGER, allowNull: true },
     team: { type: DataTypes.STRING, allowNull: true, defaultValue: 'default' },
     type: {
       type: DataTypes.STRING,

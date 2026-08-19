@@ -95,18 +95,30 @@ const initialLogs = [
   },
 ];
 
-async function ensureSeedTeamMemory() {
-  const patternCount = await TeamMemory.count({ where: { type: 'pattern' } });
+const { Op } = require('sequelize');
+
+function memoryWhere(req, extra = {}) {
+  const userId = req.user?.id;
+  if (userId) {
+    return {
+      ...extra,
+      userId,
+    };
+  }
+  return extra;
+}
+
+async function ensureSeedTeamMemory(userId) {
+  if (!userId) return;
+  const patternCount = await TeamMemory.count({ where: { userId, type: 'pattern' } });
   if (patternCount === 0) {
-    await TeamMemory.bulkCreate(initialPatterns);
-  }
-  const candidateCount = await TeamMemory.count({ where: { type: 'candidate' } });
-  if (candidateCount === 0) {
-    await TeamMemory.bulkCreate(initialCandidates);
-  }
-  const logCount = await TeamMemory.count({ where: { type: 'log' } });
-  if (logCount === 0) {
-    await TeamMemory.bulkCreate(initialLogs);
+    const userPatterns = initialPatterns.map((p) => ({
+      ...p,
+      id: undefined,
+      userId,
+      team: `user-${userId}`,
+    }));
+    await TeamMemory.bulkCreate(userPatterns);
   }
 }
 
@@ -156,20 +168,21 @@ function serializeLog(l) {
 
 // GET /api/team-memory
 exports.getOverview = async (req, res) => {
-  await ensureSeedTeamMemory();
+  const userId = req.user?.id;
+  if (userId) await ensureSeedTeamMemory(userId);
 
   const patterns = await TeamMemory.findAll({
-    where: { type: 'pattern', status: 'approved' },
+    where: memoryWhere(req, { type: 'pattern', status: 'approved' }),
     order: [['id', 'ASC']],
   });
 
   const candidates = await TeamMemory.findAll({
-    where: { type: 'candidate', status: 'pending' },
+    where: memoryWhere(req, { type: 'candidate', status: 'pending' }),
     order: [['id', 'ASC']],
   });
 
   const logs = await TeamMemory.findAll({
-    where: { type: 'log' },
+    where: memoryWhere(req, { type: 'log' }),
     order: [['id', 'DESC']],
     limit: 10,
   });
@@ -183,9 +196,10 @@ exports.getOverview = async (req, res) => {
 
 // GET /api/team-memory/patterns
 exports.listPatterns = async (req, res) => {
-  await ensureSeedTeamMemory();
+  const userId = req.user?.id;
+  if (userId) await ensureSeedTeamMemory(userId);
   const patterns = await TeamMemory.findAll({
-    where: { type: 'pattern', status: 'approved' },
+    where: memoryWhere(req, { type: 'pattern', status: 'approved' }),
     order: [['id', 'ASC']],
   });
   res.json(patterns.map(serializePattern));
@@ -193,9 +207,10 @@ exports.listPatterns = async (req, res) => {
 
 // GET /api/team-memory/candidates
 exports.listCandidates = async (req, res) => {
-  await ensureSeedTeamMemory();
+  const userId = req.user?.id;
+  if (userId) await ensureSeedTeamMemory(userId);
   const candidates = await TeamMemory.findAll({
-    where: { type: 'candidate', status: 'pending' },
+    where: memoryWhere(req, { type: 'candidate', status: 'pending' }),
     order: [['id', 'ASC']],
   });
   res.json(candidates.map(serializeCandidate));
@@ -203,9 +218,10 @@ exports.listCandidates = async (req, res) => {
 
 // GET /api/team-memory/logs
 exports.listLogs = async (req, res) => {
-  await ensureSeedTeamMemory();
+  const userId = req.user?.id;
+  if (userId) await ensureSeedTeamMemory(userId);
   const logs = await TeamMemory.findAll({
-    where: { type: 'log' },
+    where: memoryWhere(req, { type: 'log' }),
     order: [['id', 'DESC']],
     limit: 20,
   });
@@ -219,8 +235,11 @@ exports.createPattern = async (req, res) => {
     throw ApiError.badRequest('패턴 제목(title)은 필수입니다.');
   }
 
+  const userId = req.user?.id || null;
+
   const pattern = await TeamMemory.create({
-    team: 'default',
+    userId,
+    team: userId ? `user-${userId}` : 'default',
     type: 'pattern',
     title,
     purpose: purpose || '',
@@ -233,10 +252,11 @@ exports.createPattern = async (req, res) => {
   });
 
   await TeamMemory.create({
-    team: 'default',
+    userId,
+    team: userId ? `user-${userId}` : 'default',
     type: 'log',
-    action: '패턴 학습 완료',
-    description: `'${title}' 패턴이 팀 메모리에 새로 저장되었습니다.`,
+    action: '일정 등록 완료',
+    description: `'${title}' 일정이 새로 저장되었습니다.`,
     status: 'approved',
   });
 
@@ -247,9 +267,13 @@ exports.create = exports.createPattern;
 
 // PUT /api/team-memory/patterns/:id
 exports.updatePattern = async (req, res) => {
-  const pattern = await TeamMemory.findByPk(req.params.id);
+  const where = req.user?.id
+    ? { id: req.params.id, userId: req.user.id }
+    : { id: req.params.id };
+
+  const pattern = await TeamMemory.findOne({ where });
   if (!pattern || pattern.type !== 'pattern') {
-    throw ApiError.notFound('패턴을 찾을 수 없습니다.');
+    throw ApiError.notFound('일정 또는 패턴을 찾을 수 없습니다.');
   }
 
   const { title, purpose, reason, request, deadline, attachmentName, unread } = req.body;
@@ -265,10 +289,11 @@ exports.updatePattern = async (req, res) => {
   });
 
   await TeamMemory.create({
-    team: 'default',
+    userId: req.user?.id || null,
+    team: req.user?.id ? `user-${req.user.id}` : 'default',
     type: 'log',
-    action: '패턴 업데이트',
-    description: `'${pattern.title}' 패턴 내용이 업데이트되었습니다.`,
+    action: '일정/패턴 업데이트',
+    description: `'${pattern.title}' 내용이 업데이트되었습니다.`,
     status: 'approved',
   });
 
@@ -279,23 +304,28 @@ exports.update = exports.updatePattern;
 
 // DELETE /api/team-memory/patterns/:id
 exports.deletePattern = async (req, res) => {
-  const pattern = await TeamMemory.findByPk(req.params.id);
+  const where = req.user?.id
+    ? { id: req.params.id, userId: req.user.id }
+    : { id: req.params.id };
+
+  const pattern = await TeamMemory.findOne({ where });
   if (!pattern || pattern.type !== 'pattern') {
-    throw ApiError.notFound('패턴을 찾을 수 없습니다.');
+    throw ApiError.notFound('일정 또는 패턴을 찾을 수 없습니다.');
   }
 
   const title = pattern.title;
   await pattern.destroy();
 
   await TeamMemory.create({
-    team: 'default',
+    userId: req.user?.id || null,
+    team: req.user?.id ? `user-${req.user.id}` : 'default',
     type: 'log',
-    action: '패턴 삭제',
-    description: `'${title}' 패턴이 팀 메모리에서 삭제되었습니다.`,
+    action: '일정/패턴 삭제',
+    description: `'${title}' 일정이 삭제되었습니다.`,
     status: 'approved',
   });
 
-  res.json({ message: '패턴이 성공적으로 삭제되었습니다.' });
+  res.json({ message: '일정이 성공적으로 삭제되었습니다.' });
 };
 
 exports.remove = exports.deletePattern;

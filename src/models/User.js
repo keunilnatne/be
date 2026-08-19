@@ -24,6 +24,7 @@ User.init(
     communicationPreferences: { type: DataTypes.JSON, defaultValue: [] },
     preferredStyle: { type: DataTypes.STRING },
     customStyle: { type: DataTypes.TEXT },
+    country: { type: DataTypes.STRING, defaultValue: 'South Korea' },
     defaultLanguage: { type: DataTypes.STRING, defaultValue: 'Korean' },
     timezone: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Asia/Seoul' },
     workHours: { type: DataTypes.STRING, defaultValue: '09:00 - 18:00' },

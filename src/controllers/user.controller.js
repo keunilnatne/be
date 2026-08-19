@@ -23,7 +23,9 @@ async function serializeUser(user) {
     communicationPreferences: user.communicationPreferences || [],
     preferredStyle: user.preferredStyle || '명확한 표현 선호',
     customStyle: user.customStyle || '',
+    country: user.country || 'South Korea',
     defaultLanguage: user.defaultLanguage || 'Korean',
+    language: user.defaultLanguage || 'Korean',
     timezone: user.timezone || 'Asia/Seoul',
     workHours: user.workHours || '09:00 - 18:00',
     googleConnected: !!user.googleConnected,
@@ -129,6 +131,8 @@ exports.updateMe = async (req, res) => {
     communicationPreferences,
     preferredStyle,
     customStyle,
+    country,
+    language,
     defaultLanguage,
     timezone,
     workHours,
@@ -139,6 +143,7 @@ exports.updateMe = async (req, res) => {
   const effectiveJobTitle = jobTitle !== undefined ? jobTitle : (position || effectiveJobRole);
   const effectivePosition = position !== undefined ? position : (jobTitle || effectiveJobRole);
   const effectiveCompanyName = companyName !== undefined ? companyName : company;
+  const effectiveLanguage = language !== undefined ? language : defaultLanguage;
 
   await user.update({
     ...(name !== undefined && { name }),
@@ -152,7 +157,8 @@ exports.updateMe = async (req, res) => {
     ...(communicationPreferences !== undefined && { communicationPreferences }),
     ...(preferredStyle !== undefined && { preferredStyle }),
     ...(customStyle !== undefined && { customStyle }),
-    ...(defaultLanguage !== undefined && { defaultLanguage }),
+    ...(country !== undefined && { country }),
+    ...(effectiveLanguage !== undefined && { defaultLanguage: effectiveLanguage }),
     ...(timezone !== undefined && { timezone }),
     ...(workHours !== undefined && { workHours }),
   });

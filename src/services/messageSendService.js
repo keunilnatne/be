@@ -103,6 +103,8 @@ async function sendMany({ senderId, messageId, results }, dependencies = {}) {
         finalBody: body,
         status: 'sent',
         sentAt: new Date(),
+        gmailMessageId: sent.id,
+        gmailThreadId: sent.threadId || null,
         errorMessage: null,
       });
       outcomes.push({ result, gmailMessageId: sent.id, errorMessage: null });

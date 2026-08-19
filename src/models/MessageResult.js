@@ -24,6 +24,8 @@ MessageResult.init(
       validate: { isIn: [['converted', 'sent', 'failed']] },
     },
     sentAt: { type: DataTypes.DATE, allowNull: true },
+    gmailMessageId: { type: DataTypes.STRING(100), allowNull: true },
+    gmailThreadId: { type: DataTypes.STRING(100), allowNull: true },
     errorMessage: { type: DataTypes.TEXT, allowNull: true },
   },
   { sequelize, modelName: 'MessageResult', tableName: 'message_results' }

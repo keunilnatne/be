@@ -56,13 +56,15 @@ test('sendMany sends one recipient and stores final edits', async () => {
   }, {
     findMessage: async () => storedMessage,
     getAccessToken: async () => 'access-token',
-    sendMessage: async (input) => { calls.push(input); return { id: `gmail-${calls.length}` }; },
+    sendMessage: async (input) => { calls.push(input); return { id: `gmail-${calls.length}`, threadId: 'thread-1' }; },
   });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].to, 'recipient1@example.com');
   assert.equal(first.finalSubject, 'final subject');
   assert.equal(first.finalBody, 'final body');
   assert.equal(first.status, 'sent');
+  assert.equal(first.gmailMessageId, 'gmail-1');
+  assert.equal(first.gmailThreadId, 'thread-1');
   assert.equal(sent.sentCount, 1);
   assert.equal(storedMessage.status, 'sent');
 });

@@ -21,6 +21,11 @@ async function start() {
       // Existing accounts keep their current behavior. New accounts are explicitly created with false.
       "ALTER TABLE users ADD COLUMN onboarding_completed TINYINT(1) NOT NULL DEFAULT 1;",
       "ALTER TABLE users MODIFY COLUMN onboarding_completed TINYINT(1) NOT NULL DEFAULT 0;",
+      "ALTER TABLE message_results ADD COLUMN gmail_message_id VARCHAR(100) NULL;",
+      "ALTER TABLE message_results ADD COLUMN gmail_thread_id VARCHAR(100) NULL;",
+      "ALTER TABLE recipients MODIFY COLUMN response_speed VARCHAR(255) NULL DEFAULT NULL;",
+      "ALTER TABLE recipients MODIFY COLUMN average_response_minutes INT NULL DEFAULT NULL;",
+      "ALTER TABLE recipients MODIFY COLUMN collaboration_activity VARCHAR(255) NULL DEFAULT NULL;",
     ];
     for (const sql of migrations) {
       try {

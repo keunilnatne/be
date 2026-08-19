@@ -5,6 +5,7 @@ const { GmailIntegration, InboxMail } = require('../models');
 const googleAuthService = require('./googleAuthService');
 const tokenEncryption = require('./tokenEncryptionService');
 const ApiError = require('../utils/ApiError');
+const { refreshRecipientMetrics } = require('./recipientMetricsService');
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
@@ -158,7 +159,7 @@ function parseSender(fromStr = '') {
   return { name: fromStr.split('@')[0] || fromStr, email: fromStr.includes('@') ? fromStr : '' };
 }
 
-async function listMessages(userId, { maxResults = 50, q } = {}) {
+async function listMessages(userId, { maxResults = 50, q, refreshMetrics = true } = {}) {
   // 1. Gmail API에서 새로운 메일 조회 및 DB에 추가 (누적 저장)
   try {
     const auth = await googleAuthService.getAuthorizedClientForUser(userId);
@@ -229,6 +230,14 @@ async function listMessages(userId, { maxResults = 50, q } = {}) {
     const count = await InboxMail.count({ where: { userId } });
     if (count === 0 && (syncError.code === 'GMAIL_NOT_CONNECTED' || syncError.message?.includes('연결된 Gmail 계정이 없습니다'))) {
       throw syncError;
+    }
+  }
+
+  if (refreshMetrics) {
+    try {
+      await refreshRecipientMetrics(userId);
+    } catch (metricsError) {
+      console.warn(`[RecipientMetrics] Refresh warning for user ${userId}:`, metricsError.message);
     }
   }
 

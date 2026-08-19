@@ -1,6 +1,8 @@
 const { sequelize, Recipient, User, MessageResult, EntityTag } = require('../models');
 const { Op } = require('sequelize');
 const tagService = require('../services/tagService');
+const { refreshRecipientMetrics } = require('../services/recipientMetricsService');
+const gmailService = require('../services/gmailService');
 const ApiError = require('../utils/ApiError');
 
 const initialRecipients = [
@@ -135,7 +137,7 @@ function cleanResponseSpeed(speed) {
   return s || null;
 }
 
-async function serializeRecipient(recipient) {
+async function serializeRecipient(recipient, metrics = null) {
   const tags = await tagService.getTagsForEntity('recipient', recipient.id);
   const commStyle = recipient.communicationStyle;
 
@@ -160,9 +162,23 @@ async function serializeRecipient(recipient) {
     timezone: recipient.timezone || 'Asia/Seoul',
     relationship: recipient.relationship || 'External Partner',
     organizationRelation: recipient.relationship || 'External Partner',
-    responseSpeed: cleanResponseSpeed(recipient.responseSpeed),
-    averageResponseMinutes: recipient.averageResponseMinutes ? Number(recipient.averageResponseMinutes) : null,
-    collaborationActivity: recipient.collaborationActivity || null,
+    responseSpeed: cleanResponseSpeed(metrics ? metrics.responseSpeed : recipient.responseSpeed),
+    averageResponseMinutes: metrics ? metrics.averageResponseMinutes : (
+      recipient.averageResponseMinutes !== null && recipient.averageResponseMinutes !== undefined
+        ? Number(recipient.averageResponseMinutes)
+        : null
+    ),
+    collaborationActivity: metrics ? metrics.collaborationActivity : (recipient.collaborationActivity ?? null),
+    responseSampleCount: metrics?.responseSampleCount ?? 0,
+    responseRate: metrics?.responseRate ?? null,
+    responseOpportunityCount: metrics?.responseOpportunityCount ?? 0,
+    sentCount: metrics?.sentCount ?? 0,
+    receivedCount: metrics?.receivedCount ?? 0,
+    interactionCount: metrics?.interactionCount ?? 0,
+    collaborationScore: metrics?.collaborationScore ?? null,
+    responseBaselineMinutes: metrics?.responseBaselineMinutes ?? null,
+    metricsWindowDays: metrics?.metricsWindowDays ?? 90,
+    responseWindowDays: metrics?.responseWindowDays ?? 7,
     isOnline: recipient.isOnline ?? false,
     isFavorite: recipient.isFavorite ?? false,
     isRecent: recipient.isRecent ?? true,
@@ -196,8 +212,17 @@ exports.list = async (req, res) => {
     ];
   }
 
+  try {
+    // Keep metrics current even when the user opens recipients before the inbox.
+    await gmailService.listMessages(req.user.id, { maxResults: 50, refreshMetrics: false });
+  } catch (error) {
+    if (error.code !== 'GMAIL_NOT_CONNECTED') throw error;
+  }
+  const calculated = await refreshRecipientMetrics(req.user.id);
   const recipients = await Recipient.findAll({ where, order: [['id', 'ASC']] });
-  res.json(await Promise.all(recipients.map(serializeRecipient)));
+  res.json(await Promise.all(recipients.map((recipient) => (
+    serializeRecipient(recipient, calculated.byRecipientId.get(Number(recipient.id)))
+  ))));
 };
 
 exports.getByEmail = async (req, res) => {
@@ -226,9 +251,19 @@ exports.getByEmail = async (req, res) => {
       timezone: user.timezone || 'Asia/Seoul',
       relationship: '팀원',
       organizationRelation: '팀원',
-      responseSpeed: '보통',
-      averageResponseMinutes: 15,
-      collaborationActivity: 'High',
+      responseSpeed: null,
+      averageResponseMinutes: null,
+      collaborationActivity: null,
+      responseSampleCount: 0,
+      responseRate: null,
+      responseOpportunityCount: 0,
+      sentCount: 0,
+      receivedCount: 0,
+      interactionCount: 0,
+      collaborationScore: null,
+      responseBaselineMinutes: null,
+      metricsWindowDays: 90,
+      responseWindowDays: 7,
       isOnline: true,
       isFavorite: false,
       isRecent: true,
@@ -246,7 +281,11 @@ exports.getByEmail = async (req, res) => {
     where: { ...ownedRecipientWhere(req.user.id), email },
   });
   if (recipient) {
-    return res.json(await serializeRecipient(recipient));
+    const calculated = await refreshRecipientMetrics(req.user.id);
+    return res.json(await serializeRecipient(
+      recipient,
+      calculated.byRecipientId.get(Number(recipient.id))
+    ));
   }
 
   throw ApiError.notFound('등록된 이메일 정보를 찾을 수 없습니다.', 'RECIPIENT_EMAIL_NOT_FOUND');
@@ -265,9 +304,6 @@ exports.create = async (req, res) => {
     timezone,
     relationship,
     organizationRelation,
-    responseSpeed,
-    averageResponseMinutes,
-    collaborationActivity,
     isOnline,
     isFavorite,
     isRecent,
@@ -313,9 +349,9 @@ exports.create = async (req, res) => {
     language,
     timezone: timezone || 'Asia/Seoul',
     relationship: relationship || organizationRelation || 'External Partner',
-    responseSpeed,
-    averageResponseMinutes,
-    collaborationActivity,
+    responseSpeed: null,
+    averageResponseMinutes: null,
+    collaborationActivity: null,
     isOnline,
     isFavorite,
     isRecent,
@@ -340,7 +376,11 @@ exports.getOne = async (req, res) => {
     where: ownedRecipientWhere(req.user.id, req.params.recipientId),
   });
   if (!recipient) throw ApiError.notFound('수신자를 찾을 수 없습니다.');
-  res.json(await serializeRecipient(recipient));
+  const calculated = await refreshRecipientMetrics(req.user.id);
+  res.json(await serializeRecipient(
+    recipient,
+    calculated.byRecipientId.get(Number(recipient.id))
+  ));
 };
 
 exports.update = async (req, res) => {
@@ -361,9 +401,6 @@ exports.update = async (req, res) => {
     timezone,
     relationship,
     organizationRelation,
-    responseSpeed,
-    averageResponseMinutes,
-    collaborationActivity,
     isOnline,
     isFavorite,
     isRecent,
@@ -396,9 +433,6 @@ exports.update = async (req, res) => {
     ...(language !== undefined && { language }),
     ...(timezone !== undefined && { timezone }),
     ...((relationship || organizationRelation) !== undefined && { relationship: relationship || organizationRelation }),
-    ...(responseSpeed !== undefined && { responseSpeed }),
-    ...(averageResponseMinutes !== undefined && { averageResponseMinutes }),
-    ...(collaborationActivity !== undefined && { collaborationActivity }),
     ...(isOnline !== undefined && { isOnline }),
     ...(isFavorite !== undefined && { isFavorite }),
     ...(isRecent !== undefined && { isRecent }),
@@ -415,7 +449,11 @@ exports.update = async (req, res) => {
     await tagService.setTagsForEntity('recipient', recipient.id, tagIds);
   }
 
-  res.json(await serializeRecipient(recipient));
+  const calculated = await refreshRecipientMetrics(req.user.id);
+  res.json(await serializeRecipient(
+    recipient,
+    calculated.byRecipientId.get(Number(recipient.id))
+  ));
 };
 
 exports.toggleFavorite = async (req, res) => {

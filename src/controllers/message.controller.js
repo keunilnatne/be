@@ -405,6 +405,7 @@ exports.send = async (req, res) => {
     let errorMessage = '유효한 수신자 이메일이 필요합니다.';
     let sentAt = null;
     let gmailMessageId = null;
+    let gmailThreadId = null;
     let sendError = null;
 
     if (r.email) {
@@ -419,6 +420,7 @@ exports.send = async (req, res) => {
         errorMessage = null;
         sentAt = new Date();
         gmailMessageId = sent.id;
+        gmailThreadId = sent.threadId || null;
       } catch (err) {
         console.warn(`[Gmail Send Warning for ${r.email}]:`, err.message);
         sendError = err;
@@ -444,6 +446,8 @@ exports.send = async (req, res) => {
       qualityScore: 92,
       status: resultStatus,
       sentAt,
+      gmailMessageId,
+      gmailThreadId,
       errorMessage,
     });
     results.push(resRecord);

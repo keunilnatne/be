@@ -1,4 +1,4 @@
-const { Recipient, User, CompanyDna, Message, MessageResult, MessageAnalysis } = require('../models');
+const { Recipient, User, Message, MessageResult, MessageAnalysis } = require('../models');
 const tagService = require('../services/tagService');
 const aiService = require('../services/aiService');
 const gmailService = require('../services/gmailService');
@@ -244,18 +244,10 @@ exports.optimize = async (req, res) => {
   // 1. 프론트엔드가 recipients 객체 배열을 넘긴 경우
   if (Array.isArray(recipients) && recipients.length > 0) {
     requireSingleRecipient(recipients);
-    let companyDna = null;
-    try {
-      companyDna = await CompanyDna.findOne({ where: { companyId: 1 } });
-    } catch (e) {
-      // ignore
-    }
-
     const optimized = await aiService.optimizeMessage({
       recipients,
       subject,
       body,
-      companyDna,
     });
 
     return res.json({

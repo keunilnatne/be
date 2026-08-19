@@ -20,7 +20,6 @@ test('optimize, send, history and dashboard share one stored message result', as
     loadContext: async () => ({
       sender: { id: 7, jobRole: 'Backend Developer', defaultLanguage: 'Korean' },
       recipients: [{ id: 3, name: 'Alex', email: 'alex@example.com', language: 'English' }],
-      companyDna: null,
       teamMemories: [],
     }),
     optimizeMessage: async () => ({

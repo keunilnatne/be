@@ -2,7 +2,6 @@ const sequelize = require('../config/database');
 
 const User = require('./User');
 const Company = require('./Company');
-const CompanyDna = require('./CompanyDna');
 const Recipient = require('./Recipient');
 const Tag = require('./Tag');
 const EntityTag = require('./EntityTag');
@@ -61,7 +60,6 @@ module.exports = {
   sequelize,
   User,
   Company,
-  CompanyDna,
   Recipient,
   Tag,
   EntityTag,

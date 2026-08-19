@@ -9,7 +9,6 @@ const messageController = require('../src/controllers/message.controller');
 
 const baseContext = {
   sender: { id: 1, jobRole: 'Backend Developer', defaultLanguage: 'Korean' },
-  companyDna: { companyName: 'IEUM', rules: [] },
   teamMemories: [{ id: 1, title: '마감일을 명확히 작성' }],
 };
 

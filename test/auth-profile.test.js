@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { User, Company, UserSetting } = require('../src/models');
+const { User, Company, UserSetting, Notice } = require('../src/models');
 const tagService = require('../src/services/tagService');
 
 let storedUser = null;
@@ -38,6 +38,13 @@ function installModelFakes() {
     aiAutoSuggestion: true,
     dataRetentionDays: 30,
   });
+  Notice.findAll = async () => [];
+  Notice.create = async (values) => ({
+    id: 1,
+    ...values,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
   tagService.getTagsForEntity = async () => [];
   tagService.setTagsForEntity = async () => [];
 }
@@ -50,7 +57,14 @@ async function request(baseUrl, path, options = {}) {
       ...options.headers,
     },
   });
-  return { status: response.status, body: await response.json() };
+  const responseText = await response.text();
+  let body = responseText;
+  try {
+    body = JSON.parse(responseText);
+  } catch {
+    // Express의 404 HTML 응답도 상태 코드를 검증할 수 있게 그대로 둔다.
+  }
+  return { status: response.status, body };
 }
 
 test('local auth and profile API flow', async (t) => {
@@ -134,7 +148,6 @@ test('local auth and profile API flow', async (t) => {
     '/api/team-memory',
     '/api/tags',
     '/api/notices',
-    '/api/company-dna',
   ]) {
     const response = await request(baseUrl, protectedPath);
     assert.equal(response.status, 401, `${protectedPath} must require authentication`);
@@ -145,11 +158,28 @@ test('local auth and profile API flow', async (t) => {
   const forbiddenUserList = await request(baseUrl, '/api/users', { headers: authorization });
   assert.equal(forbiddenUserList.status, 403);
 
-  const forbiddenCompanyList = await request(baseUrl, '/api/companies/list', { headers: authorization });
-  assert.equal(forbiddenCompanyList.status, 403);
+  const removedCompanyDna = await request(baseUrl, '/api/company-dna', { headers: authorization });
+  assert.equal(removedCompanyDna.status, 404);
 
-  const forbiddenOtherCompany = await request(baseUrl, '/api/company-dna/2/dna', { headers: authorization });
-  assert.equal(forbiddenOtherCompany.status, 403);
+  const forbiddenNoticeCreate = await request(baseUrl, '/api/notices', {
+    method: 'POST',
+    headers: authorization,
+    body: JSON.stringify({ title: 'notice', content: 'content' }),
+  });
+  assert.equal(forbiddenNoticeCreate.status, 403);
+
+  storedUser.admin = true;
+  const adminProfile = await request(baseUrl, '/api/users/me', { headers: authorization });
+  assert.equal(adminProfile.status, 200);
+  assert.equal(adminProfile.body.admin, true);
+
+  const createdNotice = await request(baseUrl, '/api/notices', {
+    method: 'POST',
+    headers: authorization,
+    body: JSON.stringify({ title: 'notice', content: 'content' }),
+  });
+  assert.equal(createdNotice.status, 201);
+  storedUser.admin = false;
 
   const missingOldPassword = await request(baseUrl, '/api/auth/password', {
     method: 'PUT',

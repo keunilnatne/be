@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const userController = require('../controllers/user.controller');
 const authMiddleware = require('../middlewares/auth');
-const { requireRole } = require('../middlewares/authorize');
+const { requireAdmin } = require('../middlewares/authorize');
 
 const router = Router();
 
@@ -16,10 +16,10 @@ router.put('/me/ai-settings', authMiddleware, userController.updateAiSettings);
 router.post('/me/reset-personalization', authMiddleware, userController.resetPersonalization);
 router.get('/lookup', authMiddleware, userController.lookupByEmail);
 
-router.get('/', authMiddleware, requireRole('admin'), userController.list);
-router.post('/', authMiddleware, requireRole('admin'), userController.create);
-router.get('/:userId', authMiddleware, requireRole('admin'), userController.getOne);
-router.put('/:userId', authMiddleware, requireRole('admin'), userController.update);
+router.get('/', authMiddleware, requireAdmin, userController.list);
+router.post('/', authMiddleware, requireAdmin, userController.create);
+router.get('/:userId', authMiddleware, requireAdmin, userController.getOne);
+router.put('/:userId', authMiddleware, requireAdmin, userController.update);
 
 module.exports = router;
 

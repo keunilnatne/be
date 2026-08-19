@@ -15,6 +15,7 @@ async function serializeUser(user) {
     communicationPreferences: user.communicationPreferences || [],
     customStyle: user.customStyle || '',
     accountRole: user.accountRole,
+    admin: user.admin === true || Number(user.admin) === 1,
     authProvider: user.authProvider,
     onboardingCompleted: !!user.onboardingCompleted,
     company: user.Company ? { id: user.Company.id, name: user.Company.name } : null,

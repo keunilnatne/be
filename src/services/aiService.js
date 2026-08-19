@@ -104,7 +104,7 @@ function clampScore(value, fallback = 0) {
   return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : fallback;
 }
 
-function buildMultiRecipientPrompt({ recipients = [], subject, body, companyDna }) {
+function buildMultiRecipientPrompt({ recipients = [], subject, body }) {
   const recipientsInfo = recipients.map((r, i) => `
 [수신자 ${i + 1}]
 - 이름: ${r.name || '수신자'}
@@ -115,27 +115,12 @@ function buildMultiRecipientPrompt({ recipients = [], subject, body, companyDna 
 - 선호 스타일: ${Array.isArray(r.communicationStyle) ? r.communicationStyle.join(', ') : '명확하고 정중한 문체'}
 `).join('\n');
 
-  let dnaBlock = '';
-  if (companyDna && companyDna.aiEnabled) {
-    const terms = (companyDna.terms || []).map((t) => `- '${t.from}' -> '${t.to}'`).join('\n');
-    const rules = (companyDna.rules || []).map((r) => `- [${r.title}]: ${r.description}`).join('\n');
-    dnaBlock = `
-[조직 Company DNA 소통 규칙]
-- 용어 지양 및 권장 표현:
-${terms || '특이사항 없음'}
-- 조직 커뮤니케이션 규칙:
-${rules || '특이사항 없음'}
-`;
-  }
-
   return `당신은 최고 수준의 비즈니스 커뮤니케이션 AI 어시스턴트입니다.
 
 [작성 요청 정보]
 - 원본 제목: ${subject}
 - 원본 본문:
 ${body}
-
-${dnaBlock}
 
 [수신자 목록]
 ${recipientsInfo}
@@ -156,10 +141,10 @@ ${recipientsInfo}
 }
 
 async function optimizeMessage(input) {
-  // Support both object arguments { recipients, subject, body, companyDna } and { subject, body, context, requiredFacts }
+  // Support both object arguments { recipients, subject, body } and { subject, body, context, requiredFacts }
   if (input.recipients !== undefined) {
-    const { recipients = [], subject = '', body = '', companyDna = null } = input;
-    const prompt = buildMultiRecipientPrompt({ recipients, subject, body, companyDna });
+    const { recipients = [], subject = '', body = '' } = input;
+    const prompt = buildMultiRecipientPrompt({ recipients, subject, body });
     const aiRaw = await callGemini(prompt);
     const parsed = parseRequiredJson(aiRaw, ['optimizedSubject', 'optimizedBody']);
     const resultSubject = parsed.optimizedSubject;

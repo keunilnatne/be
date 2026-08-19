@@ -7,6 +7,7 @@ const { User, Recipient, sequelize } = require('../src/models');
 test('draft list and save endpoints format drafts correctly', async () => {
   await User.findOrCreate({
     where: { id: 999 },
+    attributes: ['id', 'email', 'name'],
     defaults: { id: 999, email: 'test999@example.com', name: '테스트', password: 'password' },
   });
 

@@ -9,7 +9,7 @@ async function assertEntityAccess(req, entityType, entityId) {
   const Model = ENTITY_MODELS[entityType];
   if (!Model) throw ApiError.badRequest(`알 수 없는 entityType입니다: ${entityType}`);
   let entity;
-  if (req.user.accountRole === 'admin') {
+  if (req.user.admin === true || Number(req.user.admin) === 1) {
     entity = await Model.findByPk(entityId);
   } else if (entityType === 'user') {
     entity = Number(entityId) === Number(req.user.id) ? req.user : null;

@@ -27,11 +27,8 @@
     "googleapis": "^144.0.0",
     "jsonwebtoken": "^9.0.2",
     "luxon": "^3.5.0",
-    "mammoth": "^1.12.1",
     "morgan": "^1.10.0",
-    "multer": "^2.2.0",
     "mysql2": "^3.11.0",
-    "pdf-parse": "^2.4.5",
     "sequelize": "^6.37.3",
     "sqlite3": "^6.0.1"
   },

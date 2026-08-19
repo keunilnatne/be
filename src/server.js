@@ -13,6 +13,21 @@ async function start() {
     console.log('[DB] 스키마 동기화 완료');
 
     // 신규 컬럼 자동 마이그레이션
+    let adminColumnAdded = false;
+    try {
+      await sequelize.query("ALTER TABLE users ADD COLUMN admin TINYINT(1) NOT NULL DEFAULT 0;");
+      adminColumnAdded = true;
+    } catch (error) {
+      const errorCode = error?.original?.code || error?.parent?.code;
+      if (errorCode !== 'ER_DUP_FIELDNAME') throw error;
+      // 이미 존재하는 컬럼은 무시
+    }
+
+    if (adminColumnAdded) {
+      // 기존 account_role 관리자만 최초 1회 새 컬럼으로 이관한다.
+      await sequelize.query("UPDATE users SET admin = 1 WHERE account_role = 'admin';");
+    }
+
     const migrations = [
       "ALTER TABLE users ADD COLUMN country VARCHAR(255) DEFAULT 'South Korea';",
       "ALTER TABLE users ADD COLUMN lunch_hours VARCHAR(255) DEFAULT '12:00 - 13:00';",

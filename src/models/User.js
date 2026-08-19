@@ -14,6 +14,7 @@ User.init(
     passwordHash: { type: DataTypes.STRING, allowNull: true },
     authProvider: { type: DataTypes.STRING, allowNull: false, defaultValue: 'local' },
     accountRole: { type: DataTypes.STRING, allowNull: false, defaultValue: 'user' },
+    admin: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     jobRole: { type: DataTypes.STRING },
     jobTitle: { type: DataTypes.STRING },
     position: { type: DataTypes.STRING },

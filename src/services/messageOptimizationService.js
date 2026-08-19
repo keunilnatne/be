@@ -45,7 +45,7 @@ async function callAiWithRetry(optimizeMessage, input, maxAttempts = 3) {
   throw lastError;
 }
 
-function buildAppliedContext(sender, recipient, companyDna, teamMemories) {
+function buildAppliedContext(sender, recipient, teamMemories) {
   return {
     sender: {
       jobRole: sender.jobRole,
@@ -67,16 +67,15 @@ function buildAppliedContext(sender, recipient, companyDna, teamMemories) {
       responseSpeed: recipient.responseSpeed,
       communicationStyle: recipient.communicationStyle,
     },
-    companyDna,
     teamMemories,
   };
 }
 
 async function optimizeRecipient(
-  { subject, body, purpose, sender, recipient, companyDna, teamMemories },
+  { subject, body, purpose, sender, recipient, teamMemories },
   optimizeMessage = aiService.optimizeMessage
 ) {
-  const context = buildAppliedContext(sender, recipient, companyDna, teamMemories);
+  const context = buildAppliedContext(sender, recipient, teamMemories);
   const requiredFacts = extractRequiredFacts(subject, body);
   let optimized = await optimizeMessage({ subject, body, purpose, context, requiredFacts });
   let missingFacts = findMissingFacts(optimized, requiredFacts);

@@ -52,6 +52,7 @@ function serializeAuthUser(user) {
     googleConnected: !!user.googleConnected,
     googleEmail: user.googleEmail || '',
     onboardingCompleted: !!user.onboardingCompleted,
+    admin: user.admin === true || Number(user.admin) === 1,
   };
 }
 
@@ -76,6 +77,7 @@ exports.signup = async (req, res) => {
     passwordHash: hashedPassword,
     authProvider: 'local',
     accountRole: 'user',
+    admin: false,
     jobRole: jobRole || '',
     jobTitle: jobTitle || position || '',
     position: position || jobTitle || '',
@@ -256,6 +258,7 @@ exports.googleCallback = async (req, res) => {
       googleConnected: false,
       googleEmail: account.googleEmail,
       onboardingCompleted: false,
+      admin: false,
     });
     await UserSetting.create({ userId: user.id });
   } else {

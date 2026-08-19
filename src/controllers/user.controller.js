@@ -47,6 +47,7 @@ async function serializeUser(user) {
     googleEmail: user.googleEmail || '',
     authProvider: user.authProvider || 'local',
     hasPassword: Boolean(user.password || user.passwordHash),
+    admin: user.admin === true || Number(user.admin) === 1,
     onboardingCompleted: !!user.onboardingCompleted,
     company: user.Company ? { id: user.Company.id, name: user.Company.name } : null,
     setting: {
@@ -66,7 +67,7 @@ exports.list = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
-  const { name, email, jobRole, team, companyId, timezone, workHours, tagIds } = req.body;
+  const { name, email, jobRole, team, companyId, timezone, workHours, tagIds, admin } = req.body;
   if (!name || !email) {
     throw ApiError.badRequest('name, email은 필수입니다.');
   }
@@ -77,6 +78,7 @@ exports.create = async (req, res) => {
     jobRole,
     team,
     companyId: companyId || null,
+    admin: admin === true,
     ...(timezone && { timezone }),
     ...(workHours && { workHours }),
   });
@@ -99,7 +101,7 @@ exports.update = async (req, res) => {
   const user = await User.findByPk(req.params.userId);
   if (!user) throw ApiError.notFound('사용자를 찾을 수 없습니다.');
 
-  const { name, email, jobRole, jobTitle, position, team, companyId, companyName, tools, preferredStyle, customStyle, defaultLanguage, timezone, workHours, lunchHours, tagIds } = req.body;
+  const { name, email, jobRole, jobTitle, position, team, companyId, companyName, tools, preferredStyle, customStyle, defaultLanguage, timezone, workHours, lunchHours, tagIds, admin } = req.body;
   await user.update({
     ...(name !== undefined && { name }),
     ...(email !== undefined && { email }),
@@ -116,6 +118,7 @@ exports.update = async (req, res) => {
     ...(timezone !== undefined && { timezone }),
     ...(workHours !== undefined && { workHours }),
     ...(lunchHours !== undefined && { lunchHours }),
+    ...(admin !== undefined && { admin: admin === true }),
   });
 
   if (Array.isArray(tagIds)) {

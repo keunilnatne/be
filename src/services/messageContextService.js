@@ -27,19 +27,6 @@ async function loadOptimizationContext({ senderId, recipientIds, transaction }) 
     throw ApiError.notFound('일부 수신자를 찾을 수 없거나 접근 권한이 없습니다.');
   }
 
-  let companyDna = null;
-  if (sender.companyId) {
-    [companyDna] = await sequelize.query(
-      `SELECT company_id AS companyId, company_name AS companyName,
-              decision_structure AS decisionStructure, channels, reporting,
-              terms, rules, accuracy, ai_enabled AS aiEnabled
-         FROM company_dna
-        WHERE company_id = :companyId
-        LIMIT 1`,
-      { replacements: { companyId: sender.companyId }, type: QueryTypes.SELECT, transaction }
-    );
-  }
-
   const teamMemories = sender.team
     ? await sequelize.query(
       `SELECT id, title, purpose, reason, request, deadline, text, suggestion, confidence
@@ -54,7 +41,6 @@ async function loadOptimizationContext({ senderId, recipientIds, transaction }) 
   const recipientById = new Map(recipients.map((recipient) => [Number(recipient.id), recipient]));
   return {
     sender,
-    companyDna: companyDna?.aiEnabled === 0 ? null : companyDna,
     teamMemories,
     recipients: recipientIds.map((id) => recipientById.get(Number(id))),
   };

@@ -1,4 +1,4 @@
-const { Recipient, User } = require('../models');
+const { sequelize, Recipient, User, MessageResult, EntityTag } = require('../models');
 const { Op } = require('sequelize');
 const tagService = require('../services/tagService');
 const ApiError = require('../utils/ApiError');
@@ -137,30 +137,7 @@ function cleanResponseSpeed(speed) {
 
 async function serializeRecipient(recipient) {
   const tags = await tagService.getTagsForEntity('recipient', recipient.id);
-
-  let commStyle = recipient.communicationStyle;
-  let userCustomStyle = recipient.customStyle || '';
-
-  // 이메일이 일치하는 실제 가입 회원(User)이 있으면 최신 선호 소통 스타일 및 추가 스타일을 실시간 동기화
-  if (recipient.email) {
-    try {
-      const registeredUser = await User.findOne({ where: { email: recipient.email } });
-      if (registeredUser) {
-        if (registeredUser.customStyle) {
-          userCustomStyle = registeredUser.customStyle;
-        }
-        if (Array.isArray(registeredUser.communicationPreferences) && registeredUser.communicationPreferences.length > 0) {
-          commStyle = registeredUser.communicationPreferences;
-        } else if (registeredUser.preferredStyle) {
-          commStyle = [registeredUser.preferredStyle];
-        } else if (registeredUser.customStyle) {
-          commStyle = [registeredUser.customStyle];
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
+  const commStyle = recipient.communicationStyle;
 
   const finalStyles = Array.isArray(commStyle) && commStyle.length > 0
     ? commStyle
@@ -195,7 +172,7 @@ async function serializeRecipient(recipient) {
     memo: recipient.memo || '',
     communicationStyle: finalStyles,
     preferredStyle,
-    customStyle: userCustomStyle || recipient.customStyle || '',
+    customStyle: recipient.customStyle || '',
     tags: tags.map((t) => ({ id: t.id, category: t.category, name: t.name, label: t.label })),
   };
 }
@@ -452,11 +429,25 @@ exports.toggleFavorite = async (req, res) => {
 };
 
 exports.delete = async (req, res) => {
-  const recipient = await Recipient.findOne({
-    where: ownedRecipientWhere(req.user.id, req.params.recipientId),
-  });
-  if (!recipient) throw ApiError.notFound('수신자를 찾을 수 없습니다.');
+  await sequelize.transaction(async (transaction) => {
+    const recipient = await Recipient.findOne({
+      where: ownedRecipientWhere(req.user.id, req.params.recipientId),
+      transaction,
+    });
+    if (!recipient) throw ApiError.notFound('수신자를 찾을 수 없습니다.');
 
-  await recipient.destroy();
+    // 메시지 이력에는 이름/이메일 스냅샷이 남아 있으므로 참조만 해제하고
+    // 수신자 전용 태그와 프로필 레코드는 완전히 삭제한다.
+    await MessageResult.update(
+      { recipientId: null },
+      { where: { recipientId: recipient.id }, transaction },
+    );
+    await EntityTag.destroy({
+      where: { entityType: 'recipient', entityId: recipient.id },
+      transaction,
+    });
+    await recipient.destroy({ transaction });
+  });
+
   res.json({ message: '수신자가 삭제되었습니다.' });
 };

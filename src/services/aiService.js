@@ -425,7 +425,9 @@ ${content}
 4. dateTime:
    - 일정이 있을 경우: 본문의 날짜/시간 또는 수신 시각(${nowStr})을 기준으로 "M.D 오전/오후 H:MM" (예: "8.22 오전 0:00", "8.20 오후 3:00") 형식으로 변환.
    - 일정이 없을 경우: "".
-5. source: "메일 내용 기반"
+5. place:
+   - 회의실, 건물, 온라인 링크, Zoom/Google Meet 등 본문에 명시된 장소만 반환하세요. 없으면 빈 문자열입니다.
+6. source: "메일 내용 기반"
 
 반드시 아래 JSON 형식으로만 응답하세요:
 {
@@ -433,6 +435,7 @@ ${content}
   "quote": "점검 시간 : 2026년 8월 22일 토요일 00:00 ~ 06:00",
   "title": "닷홈 정기점검",
   "dateTime": "8.22 오전 0:00",
+  "place": "온라인",
   "source": "메일 내용 기반"
 }`;
 
@@ -444,6 +447,7 @@ ${content}
       quote: parsed.quote || '',
       title: parsed.title || subject || '업무 일정',
       dateTime: parsed.dateTime || '',
+      place: parsed.place || '',
       source: parsed.source || '메일 내용 기반',
     };
   } catch (error) {
@@ -455,6 +459,7 @@ ${content}
       quote: hasMatch ? content.slice(0, 100) : '',
       title: subject || '업무 일정',
       dateTime: '일정 확인 필요',
+      place: '',
       source: '메일 내용 기반',
     };
   }

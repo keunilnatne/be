@@ -302,15 +302,27 @@ async function analyzeRecipientProfile(recipient, generate = callGemini) {
     preferredStyle: cleanText(recipient?.preferredStyle, 200),
     customStyle: cleanText(recipient?.customStyle, 500),
     communicationStyle: cleanStringArray(recipient?.communicationStyle, 8, 80),
+    emailSamples: (recipient?.emailSamples || []).slice(0, 8).map((sample) => ({
+      subject: cleanText(sample?.subject, 300),
+      body: String(sample?.body || '').trim().slice(0, 1200),
+    })).filter((sample) => sample.subject || sample.body),
   };
   const prompt = `당신은 업무 커뮤니케이션 프로필 분석 AI입니다.
-아래 수신자 정보를 근거로만 분석하고, 입력에 없는 개인정보나 사실을 추측하지 마세요.
+아래 수신자 정보와 실제 수신 이메일 예시만 근거로 분석하고, 입력에 없는 사실을 추측하지 마세요.
 
 [수신자]
 ${JSON.stringify(safeRecipient, null, 2)}
 
+분석 규칙:
+1. terms는 이메일 예시에서 실제로 반복 사용된 업무 용어나 표현만 추출하세요.
+2. rules는 '정중하게', '간결하게' 같은 추상적인 선호 스타일을 쓰지 마세요.
+3. rules는 관찰 가능한 작성 습관을 구체적인 문장으로 작성하세요.
+   예: '첫 문장을 인사말로 시작함', '인사말 뒤에 수신자 이름을 붙임', '요청 사항 뒤에 마감 시간을 명시함', '본문 끝에 감사 인사를 사용함'.
+4. 이메일 예시로 확인할 수 없는 습관은 만들지 마세요.
+5. 이메일 예시가 없다면 terms와 rules는 빈 배열로 반환하세요.
+
 반드시 JSON만 출력하세요:
-{"tags":["커뮤니케이션 성향"],"terms":["자주 사용할 가능성이 높은 업무 용어"],"rules":["권장 소통 규칙"],"tone":"권장 어조","style":"권장 문체","emoji":"대표 이모지 1개"}`;
+{"tags":[],"terms":["실제로 반복 사용된 업무 용어"],"rules":["실제 이메일에서 관찰된 구체적인 작성 습관"],"tone":"","style":"","emoji":""}`;
   const parsed = parseJsonResponse(await generate(prompt));
   const result = {
     tags: cleanStringArray(parsed.tags),

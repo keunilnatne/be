@@ -1,4 +1,4 @@
-const { Recipient } = require('../models');
+const { Recipient, InboxMail } = require('../models');
 const aiService = require('../services/aiService');
 const ApiError = require('../utils/ApiError');
 
@@ -18,7 +18,23 @@ exports.analyzeRecipient = async (req, res) => {
   });
   if (!recipient) throw ApiError.notFound('수신자를 찾을 수 없습니다.');
 
-  res.json(await aiService.analyzeRecipientProfile(recipient.get({ plain: true })));
+  const recipientData = recipient.get({ plain: true });
+  const emailSamples = recipientData.email
+    ? await InboxMail.findAll({
+      where: { userId: req.user.id, fromEmail: recipientData.email },
+      attributes: ['subject', 'body', 'snippet'],
+      order: [['internalDate', 'DESC']],
+      limit: 8,
+    })
+    : [];
+
+  res.json(await aiService.analyzeRecipientProfile({
+    ...recipientData,
+    emailSamples: emailSamples.map((mail) => ({
+      subject: mail.subject || '',
+      body: String(mail.body || mail.snippet || '').slice(0, 1200),
+    })),
+  }));
 };
 
 exports.analyzeMessageMetadata = async (req, res) => {

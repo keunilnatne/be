@@ -24,6 +24,22 @@ function findMissingFacts(result, requiredFacts) {
   return requiredFacts.filter((fact) => !output.includes(fact.replace(/\s/g, '')));
 }
 
+function matchesTargetLanguage(result, targetLanguage) {
+  const text = `${result.subject || ''}\n${result.body || ''}`;
+  const letters = text.match(/[A-Za-z가-힣]/g) || [];
+  const hangulCount = (text.match(/[가-힣]/g) || []).length;
+  const normalized = String(targetLanguage || '').trim().toLowerCase();
+
+  if (!letters.length) return false;
+  if (['korean', '한국어', 'ko', 'ko-kr'].includes(normalized)) {
+    return hangulCount >= Math.max(2, Math.ceil(letters.length * 0.1));
+  }
+  if (['english', '영어', 'en', 'en-us', 'en-gb'].includes(normalized)) {
+    return hangulCount <= Math.max(2, Math.floor(letters.length * 0.1));
+  }
+  return true;
+}
+
 function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -79,21 +95,32 @@ async function optimizeRecipient(
   const requiredFacts = extractRequiredFacts(subject, body);
   let optimized = await optimizeMessage({ subject, body, purpose, context, requiredFacts });
   let missingFacts = findMissingFacts(optimized, requiredFacts);
+  let languageMismatch = !matchesTargetLanguage(optimized, recipient.language);
 
-  if (missingFacts.length) {
+  if (missingFacts.length || languageMismatch) {
+    const retryReasons = [];
+    if (missingFacts.length) retryReasons.push(`다음 사실이 누락되었습니다: ${missingFacts.join(', ')}`);
+    if (languageMismatch) retryReasons.push(`결과 언어가 수신자 언어(${recipient.language || 'Korean'})와 다릅니다.`);
     optimized = await optimizeMessage({
       subject,
       body,
       purpose,
       context,
       requiredFacts,
-      retryReason: `다음 사실이 누락되었습니다: ${missingFacts.join(', ')}`,
+      retryReason: retryReasons.join(' / '),
     });
     missingFacts = findMissingFacts(optimized, requiredFacts);
+    languageMismatch = !matchesTargetLanguage(optimized, recipient.language);
   }
 
   if (missingFacts.length) {
     const error = new Error(`원문 사실 보존에 실패했습니다: ${missingFacts.join(', ')}`);
+    error.statusCode = 502;
+    throw error;
+  }
+
+  if (languageMismatch) {
+    const error = new Error(`수신자 언어(${recipient.language || 'Korean'})로 메시지를 생성하지 못했습니다.`);
     error.statusCode = 502;
     throw error;
   }
@@ -155,6 +182,7 @@ module.exports = {
   callAiWithRetry,
   extractRequiredFacts,
   findMissingFacts,
+  matchesTargetLanguage,
   optimizeMany,
   optimizeRecipient,
 };

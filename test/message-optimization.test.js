@@ -84,6 +84,42 @@ test('callAiWithRetry retries transient AI errors up to success', async () => {
   assert.equal(result.subject, 'ok');
 });
 
+test('matchesTargetLanguage distinguishes Korean and English output', () => {
+  assert.equal(optimizationService.matchesTargetLanguage(
+    { subject: 'Review', body: 'Please review the schedule.' },
+    'English'
+  ), true);
+  assert.equal(optimizationService.matchesTargetLanguage(
+    { subject: '검토 요청', body: '일정을 확인해 주세요.' },
+    'English'
+  ), false);
+  assert.equal(optimizationService.matchesTargetLanguage(
+    { subject: '검토 요청', body: '일정을 확인해 주세요.' },
+    'Korean'
+  ), true);
+});
+
+test('optimizeRecipient retries when output language differs from recipient language', async () => {
+  let calls = 0;
+  const result = await optimizationService.optimizeRecipient(
+    {
+      ...baseContext,
+      recipient: { id: 2, language: 'English' },
+      subject: '검토 요청',
+      body: '일정을 확인해 주세요.',
+    },
+    async () => {
+      calls += 1;
+      return calls === 1
+        ? { subject: '검토 요청', body: '일정을 확인해 주세요.', qualityScore: 80 }
+        : { subject: 'Review request', body: 'Please review the schedule.', qualityScore: 90 };
+    }
+  );
+
+  assert.equal(calls, 2);
+  assert.equal(result.subject, 'Review request');
+});
+
 test('callAiWithRetry does not immediately retry a long quota delay', async () => {
   let calls = 0;
   await assert.rejects(

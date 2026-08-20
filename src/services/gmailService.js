@@ -159,6 +159,16 @@ function parseSender(fromStr = '') {
   return { name: fromStr.split('@')[0] || fromStr, email: fromStr.includes('@') ? fromStr : '' };
 }
 
+function deduplicateInboxMessages(messages) {
+  const seen = new Set();
+  return (Array.isArray(messages) ? messages : []).filter((message) => {
+    const gmailMessageId = String(message?.gmailMessageId || message?.id || '').trim();
+    if (!gmailMessageId || seen.has(gmailMessageId)) return false;
+    seen.add(gmailMessageId);
+    return true;
+  });
+}
+
 async function listMessages(userId, { maxResults = 50, q, refreshMetrics = true } = {}) {
   // 1. Gmail API에서 새로운 메일 조회 및 DB에 추가 (누적 저장)
   try {
@@ -167,7 +177,7 @@ async function listMessages(userId, { maxResults = 50, q, refreshMetrics = true 
 
     const queryStr = q ? `in:inbox ${q}` : 'in:inbox';
     const { data } = await gmail.users.messages.list({ userId: 'me', maxResults, q: queryStr });
-    const messages = data.messages || [];
+    const messages = deduplicateInboxMessages(data.messages || []);
 
     if (messages.length > 0) {
       // 이미 DB에 존재하는 메일 ID 조회
@@ -262,7 +272,7 @@ async function listMessages(userId, { maxResults = 50, q, refreshMetrics = true 
     ],
   });
 
-  return storedMails.map((m) => ({
+  return deduplicateInboxMessages(storedMails).map((m) => ({
     id: m.gmailMessageId,
     threadId: m.threadId,
     subject: m.subject || '(제목 없음)',
@@ -411,4 +421,5 @@ module.exports = {
   listMessages,
   getMessage,
   getAttachment,
+  deduplicateInboxMessages,
 };

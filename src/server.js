@@ -2,6 +2,7 @@ const app = require('./app');
 const env = require('./config/env');
 const sequelize = require('./config/database');
 const googleAccountStore = require('./services/googleAccountStore');
+const { ensureInboxMailUniqueness } = require('./services/inboxMailIntegrityService');
 require('./models'); // 모델 로드 및 연관관계 설정
 
 async function start() {
@@ -9,7 +10,9 @@ async function start() {
     await sequelize.authenticate();
     console.log('[DB] MySQL 연결 성공');
 
+    await ensureInboxMailUniqueness();
     await sequelize.sync();
+    await ensureInboxMailUniqueness();
     console.log('[DB] 스키마 동기화 완료');
 
     // 신규 컬럼 자동 마이그레이션

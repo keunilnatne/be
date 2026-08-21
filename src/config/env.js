@@ -1,7 +1,10 @@
 require('dotenv').config();
+const { normalizeFrontendOrigin } = require('../utils/publicUrl');
+
+const nodeEnv = process.env.NODE_ENV || 'development';
 
 module.exports = {
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   port: Number(process.env.PORT || 4000),
 
   db: {
@@ -28,7 +31,10 @@ module.exports = {
     clientSecret: (process.env.GOOGLE_CLIENT_SECRET || '').trim(),
     redirectUri: (process.env.GOOGLE_REDIRECT_URI || '').trim(),
     tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY,
-    frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
+    frontendOrigin: normalizeFrontendOrigin(
+      process.env.FRONTEND_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173',
+      nodeEnv
+    ),
   },
 };
 

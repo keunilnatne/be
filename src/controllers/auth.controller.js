@@ -212,7 +212,7 @@ exports.googleCallback = async (req, res) => {
     account = await googleAuthService.handleCallback(code, state);
   } catch (err) {
     console.warn('[Google Callback Exception]:', err.message || err);
-    const frontendUrl = process.env.FRONTEND_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = env.google.frontendOrigin;
 
     // 이미 사용된 코드나 세션 만료 시 500 에러 대신 사용자 친화적 팝업 안내 반환
     return res.status(400).send(`
@@ -289,7 +289,7 @@ exports.googleCallback = async (req, res) => {
   await user.save();
 
   const token = generateToken(user);
-  const frontendUrl = process.env.FRONTEND_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173';
+  const frontendUrl = env.google.frontendOrigin;
   const email = account.googleEmail;
 
   return res.type('html').send(`

@@ -6,6 +6,22 @@ const authController = require('../src/controllers/auth.controller');
 const googleAuthService = require('../src/services/googleAuthService');
 const googleAccountStore = require('../src/services/googleAccountStore');
 const tokenEncryption = require('../src/services/tokenEncryptionService');
+const { normalizeFrontendOrigin } = require('../src/utils/publicUrl');
+
+test('production Google callbacks target HTTPS after TLS is enabled', () => {
+  assert.equal(
+    normalizeFrontendOrigin('http://lionieum.kro.kr/', 'production'),
+    'https://lionieum.kro.kr'
+  );
+  assert.equal(
+    normalizeFrontendOrigin('http://localhost:5173/', 'production'),
+    'http://localhost:5173'
+  );
+  assert.equal(
+    normalizeFrontendOrigin('http://lionieum.kro.kr/', 'development'),
+    'http://lionieum.kro.kr'
+  );
+});
 
 test('Google login state is signed and rejects forged values', () => {
   const state = googleAuthService.createLoginState();
